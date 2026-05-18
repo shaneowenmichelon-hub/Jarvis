@@ -22,6 +22,8 @@ export const api = {
   removeAccount: (email)        => req(`/api/auth/account/${encodeURIComponent(email)}`, { method: 'DELETE' }),
   setPrimary:    (email)        => req('/api/auth/primary', { method: 'POST', body: JSON.stringify({ email }) }),
   sponsors:      ({ sync } = {}) => req(`/api/sponsors${sync ? '?sync=1' : ''}`),
+  deepSync:      ()             => req('/api/sync/deep', { method: 'POST' }),
+  deepSyncStatus:()             => req('/api/sync/status'),
   patchSponsor:  (id, patch)    => req(`/api/sponsors/${id}`, { method: 'POST', body: JSON.stringify(patch) }),
   markFollowup:  (id)           => req(`/api/sponsors/${id}/followup`, { method: 'POST' }),
   jarvis:        (messages)     => req('/api/jarvis/chat', { method: 'POST', body: JSON.stringify({ messages }) }),

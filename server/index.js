@@ -16,7 +16,7 @@ import {
   grantedScopeKeys,
   REQUIRED_SCOPE_KEYS,
 } from './auth.js';
-import { getStatus, syncAllSponsors, getEnrichedSponsors } from './gmail.js';
+import { getStatus, syncAllSponsors, getEnrichedSponsors, startDeepSync, getDeepSyncState } from './gmail.js';
 import {
   loadStore,
   setOverride,
@@ -180,6 +180,19 @@ app.post('/api/sponsors/:id/followup', async (req, res) => {
   const now = new Date().toISOString();
   await setOverride(id, { _manualLastOutbound: now });
   res.json({ ok: true });
+});
+
+/* ---------- deep sync (scan every email across every connected inbox) ---------- */
+app.post('/api/sync/deep', (_req, res) => {
+  const result = startDeepSync();
+  if (!result.started) {
+    return res.status(409).json({ error: 'Deep sync already in progress.', progress: result.progress });
+  }
+  res.status(202).json({ ok: true, started: true });
+});
+
+app.get('/api/sync/status', (_req, res) => {
+  res.json(getDeepSyncState());
 });
 
 /* ---------- jarvis chat ---------- */

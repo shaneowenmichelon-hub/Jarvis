@@ -5,7 +5,7 @@ import {
   ChevronRight, Calendar, Inbox, MailX, Flame,
   Power, Wifi, Lock, Eye, MessageSquare, ArrowUpRight, Sparkles,
   RefreshCw, LogOut, Link2, AlertCircle, Mic, MicOff, Volume2, VolumeX,
-  ShieldCheck, Edit3, Trash2,
+  ShieldCheck, Edit3, Trash2, Zap,
 } from 'lucide-react';
 import { api } from './api.js';
 
@@ -80,6 +80,8 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState(null);
   const [lastSync, setLastSync] = useState(null);
+  const [deepSync, setDeepSync] = useState({ running: false, progress: null, lastResult: null, lastDeepSync: null });
+  const [toast, setToast] = useState(null);
 
   /* live clock — pure aesthetic */
   useEffect(() => {
@@ -168,6 +170,47 @@ export default function App() {
     await loadAll();
   };
 
+  /* Deep sync: kick it off, then poll status until done. On completion,
+     refresh the pipeline and show a toast. */
+  const runDeepSync = async () => {
+    try {
+      await api.deepSync();
+      setDeepSync({ running: true, progress: { sponsorsDone: 0, totalSponsors: 0, currentSponsor: null, accounts: 0 }, lastResult: null });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  useEffect(() => {
+    if (!deepSync.running) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const status = await api.deepSyncStatus();
+        if (cancelled) return;
+        setDeepSync(status);
+        if (!status.running && status.lastResult) {
+          await loadAll();
+          if (status.lastResult.ok) {
+            const { counts, durationMs } = status.lastResult;
+            setToast({
+              tone: 'ok',
+              text: `Synced ${counts.messages.toLocaleString()} messages across ${counts.sponsors} sponsors in ${counts.accounts} inbox${counts.accounts === 1 ? '' : 'es'} (${Math.round(durationMs / 1000)}s).`,
+            });
+          } else {
+            setToast({ tone: 'err', text: status.lastResult.error || 'Deep sync failed.' });
+          }
+          setTimeout(() => setToast(null), 8000);
+        }
+      } catch (err) {
+        if (!cancelled) setError(err.message);
+      }
+    };
+    const id = setInterval(tick, 2000);
+    tick();
+    return () => { cancelled = true; clearInterval(id); };
+  }, [deepSync.running, loadAll]);
+
   return (
     <div style={styles.shell}>
       <BackgroundFX />
@@ -189,6 +232,13 @@ export default function App() {
         <ReauthBanner onReauth={connectGmail} />
       )}
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
+      {toast && (
+        <div style={{ ...styles.banner, borderColor: toast.tone === 'ok' ? COLORS.greenDim : COLORS.redDim, color: toast.tone === 'ok' ? COLORS.green : COLORS.red }}>
+          {toast.tone === 'ok' ? <CheckCircle2 size={14} /> : <AlertTriangle size={14} />}
+          <div style={{ flex: 1 }}>{toast.text}</div>
+          <button onClick={() => setToast(null)} style={styles.bannerClose}><XCircle size={14} /></button>
+        </div>
+      )}
 
       <div style={styles.mainGrid}>
         <div style={styles.col}>
@@ -198,6 +248,8 @@ export default function App() {
             onAddAccount={connectGmail}
             onRemove={removeAccount}
             onSetPrimary={setPrimaryAccount}
+            deepSync={deepSync}
+            onDeepSync={runDeepSync}
           />
           <FollowUpPanel
             overdue={stats.overdue}
@@ -463,8 +515,10 @@ function KpiCard({ label, value, sub, color, icon: Icon }) {
    ACCOUNTS PANEL
    Manages connected Gmail inboxes — add, remove, set primary.
    ============================================================ */
-function AccountsPanel({ authStatus, onAddAccount, onRemove, onSetPrimary }) {
+function AccountsPanel({ authStatus, onAddAccount, onRemove, onSetPrimary, deepSync, onDeepSync }) {
   const accounts = authStatus.accounts || [];
+  const dsRunning = deepSync?.running;
+  const dsProgress = deepSync?.progress;
   return (
     <Panel
       title="GMAIL INBOXES"
@@ -514,6 +568,42 @@ function AccountsPanel({ authStatus, onAddAccount, onRemove, onSetPrimary }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {accounts.length > 0 && (
+        <div style={styles.deepSyncBox}>
+          <button
+            onClick={onDeepSync}
+            disabled={dsRunning}
+            style={{
+              ...styles.deepSyncBtn,
+              color: dsRunning ? COLORS.cyan : COLORS.bg,
+              background: dsRunning ? 'transparent' : COLORS.cyan,
+              borderColor: COLORS.cyan,
+            }}
+          >
+            {dsRunning ? (
+              <>
+                <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                <span>
+                  SCANNING {dsProgress?.currentSponsor || ''}…
+                  {dsProgress?.totalSponsors ? ` ${dsProgress.sponsorsDone}/${dsProgress.totalSponsors}` : ''}
+                </span>
+              </>
+            ) : (
+              <>
+                <Zap size={11} /> DEEP SYNC ALL
+              </>
+            )}
+          </button>
+          <div style={styles.deepSyncHint}>
+            {dsRunning
+              ? `Scanning every email across ${dsProgress?.accounts || accounts.length} inbox${(dsProgress?.accounts || accounts.length) === 1 ? '' : 'es'}. This can take ~1 minute.`
+              : deepSync?.lastDeepSync
+              ? `Last full scan: ${new Date(deepSync.lastDeepSync).toLocaleString()}`
+              : 'Pulls full history (not just recent threads). Run after adding a new inbox.'}
+          </div>
         </div>
       )}
     </Panel>
@@ -786,6 +876,16 @@ function DetailPanel({ sponsor, onMark, now }) {
           color={sponsor.followUpDue && new Date(sponsor.followUpDue) < now ? COLORS.red : COLORS.yellow}
         />
         <DetailStat label="THREADS" value={sponsor.threadCount ?? 0} color={COLORS.text} />
+        {sponsor.messageCount != null && (
+          <DetailStat label="TOTAL MSGS" value={sponsor.messageCount} color={COLORS.text} />
+        )}
+        {sponsor.firstContact && (
+          <DetailStat
+            label="FIRST CONTACT"
+            value={new Date(sponsor.firstContact).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+            color={COLORS.textDim}
+          />
+        )}
       </div>
 
       {sponsor.notes && (
@@ -1560,6 +1660,9 @@ const styles = {
   acctPrimary: { fontSize: 7, color: COLORS.orange, border: `1px solid ${COLORS.orangeDim}`, padding: '1px 5px', letterSpacing: '0.2em', borderRadius: 2 },
   acctActions: { display: 'flex', gap: 4, alignItems: 'center' },
   tinyBtn: { background: 'transparent', border: '1px solid', padding: '3px 7px', fontSize: 8, letterSpacing: '0.16em', fontFamily: FONT_MONO, fontWeight: 600, borderRadius: 2 },
+  deepSyncBox: { marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}`, display: 'flex', flexDirection: 'column', gap: 6 },
+  deepSyncBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, border: '1px solid', padding: '8px 10px', fontSize: 9, letterSpacing: '0.18em', fontFamily: FONT_MONO, fontWeight: 700, borderRadius: 2, transition: 'all 0.15s' },
+  deepSyncHint: { fontSize: 9, color: COLORS.textDim, letterSpacing: '0.04em', textAlign: 'center', lineHeight: 1.4 },
   chatHint: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 8, color: COLORS.textDim, letterSpacing: '0.14em', marginTop: 8 },
   collapseBtn: { background: 'transparent', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.cyan, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 2, fontSize: 14, lineHeight: 1 },
 };
