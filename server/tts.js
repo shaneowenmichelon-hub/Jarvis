@@ -4,8 +4,15 @@
 
 import { Readable } from 'node:stream';
 
-const DEFAULT_VOICE = process.env.ELEVENLABS_VOICE_ID || 'JBFqnCBsd6RMkjVDRZzb'; // "George" — British, mature, warm
-const DEFAULT_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_turbo_v2_5';
+// Daniel — British male news-presenter delivery. More conversational than
+// George (who's an audiobook narrator) and lands closer to the
+// measured-but-warm JARVIS feel from Iron Man.
+const DEFAULT_VOICE = process.env.ELEVENLABS_VOICE_ID || 'onwK4e9ZLuTAKqWW03F9';
+
+// eleven_multilingual_v2 has the most natural prosody — slight latency
+// tradeoff vs turbo but ~3x more human-sounding. Worth it for a voice
+// you actually want to listen to.
+const DEFAULT_MODEL = process.env.ELEVENLABS_MODEL || 'eleven_multilingual_v2';
 
 export function isEnabled() {
   return Boolean(process.env.ELEVENLABS_API_KEY);
@@ -32,12 +39,13 @@ export async function streamTTS(text, res) {
     body: JSON.stringify({
       text,
       model_id: DEFAULT_MODEL,
-      // Tuned for a measured, refined JARVIS delivery — slight expressiveness,
-      // strong voice fidelity, gentle prosody variation.
+      // Lower stability = more natural prosody variation (sounds less robotic).
+      // Higher style = more expressive emotion in delivery.
+      // High similarity_boost preserves the voice's character even with more variation.
       voice_settings: {
-        stability: 0.5,
+        stability: 0.32,
         similarity_boost: 0.85,
-        style: 0.35,
+        style: 0.55,
         use_speaker_boost: true,
       },
     }),
