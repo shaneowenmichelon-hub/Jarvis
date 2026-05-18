@@ -20,7 +20,7 @@ export const SPONSORS = [
   { id: 'nevermissed',  name: 'NeverMissed',          stage: 'PAST',    tier: 'B', value: 0,     event: 'Boot Block Party', contact: 'team@nevermissed.app',      status: 'DROPPED', notes: '$5K refunded. Not ideal partner — do not re-pitch.' },
 
   // IN-DEAL
-  { id: 'polymarket',   name: 'Polymarket',           stage: 'CLOSED',  tier: 'A', value: 0,     event: 'Night School',     contact: 'partnerships@polymarket.com', status: 'SIGNED',       notes: 'Performance deal: $75 per signup using code NIGHTSCHOOL that deposits $20+. Live across Night School tour + NYC/NOLA shows.' },
+  { id: 'polymarket',   name: 'Polymarket',           stage: 'CLOSED',  tier: 'A', value: 200000, event: 'Night School',     contact: 'partnerships@polymarket.com', status: 'SIGNED',       notes: 'Performance deal: $75 per signup using code NIGHTSCHOOL that deposits $20+. Live across Night School tour + NYC/NOLA shows. Projected ~$200K rev.' },
   { id: 'flybyjing',    name: 'Fly By Jing',          stage: 'PAST',    tier: 'B', value: 0,     event: 'Night School',     contact: 'jing@flybyjing.com',        status: 'DROPPED',      notes: 'Canceled — no available budget.' },
   { id: 'canes',        name: "Raising Cane's",       stage: 'IN_DEAL', tier: 'A', value: 60000, event: 'HOMETURF',         contact: 'sponsor@raisingcanes.com',  status: 'WAITING',      notes: 'Regional approvals — ping Friday.' },
   { id: 'bodyarmor',    name: 'BODYARMOR',            stage: 'IN_DEAL', tier: 'A', value: 55000, event: 'Hells Gala',       contact: 'sports@bodyarmor.com',      status: 'STALE',        notes: 'Stalled. Push or drop next week.' },

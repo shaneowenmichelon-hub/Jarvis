@@ -4,7 +4,7 @@ import {
   Target, Cpu, TrendingUp, Users, Shield, Search,
   ChevronRight, Calendar, Inbox, MailX, Flame,
   Power, Wifi, Lock, Eye, MessageSquare, ArrowUpRight, Sparkles,
-  RefreshCw, LogOut, Link2, AlertCircle,
+  RefreshCw, LogOut, Link2, AlertCircle, Mic, MicOff, Volume2, VolumeX,
 } from 'lucide-react';
 import { api } from './api.js';
 
@@ -730,6 +730,103 @@ function DetailStat({ label, value, color }) {
 }
 
 /* ============================================================
+   SPEECH HOOKS
+   Browser-native: SpeechSynthesis for output, SpeechRecognition
+   for input. No API keys, no cost. Works in Chrome, Edge, Safari.
+   ============================================================ */
+
+/* Pick the best British male voice available on this device.
+   Falls back through preferences if the ideal isn't installed. */
+function useBritishVoice() {
+  const [voice, setVoice] = useState(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+    const pick = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return;
+      const tryFind = (pred) => voices.find(pred);
+      // Strongest match: known British male voice names
+      const v =
+        tryFind((v) => v.lang === 'en-GB' && /daniel|george|oliver|arthur|jamie|jarvis/i.test(v.name)) ||
+        tryFind((v) => v.lang === 'en-GB' && /male/i.test(v.name)) ||
+        tryFind((v) => v.lang === 'en-GB') ||
+        tryFind((v) => /en[-_]gb/i.test(v.lang)) ||
+        tryFind((v) => v.lang?.startsWith('en'));
+      setVoice(v || null);
+    };
+    pick();
+    window.speechSynthesis.onvoiceschanged = pick;
+    return () => { window.speechSynthesis.onvoiceschanged = null; };
+  }, []);
+
+  const speak = useCallback((text) => {
+    if (typeof window === 'undefined' || !window.speechSynthesis || !text) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    if (voice) u.voice = voice;
+    u.rate = 0.96;
+    u.pitch = 0.92;
+    u.volume = 1;
+    window.speechSynthesis.speak(u);
+  }, [voice]);
+
+  const cancel = useCallback(() => {
+    window.speechSynthesis?.cancel();
+  }, []);
+
+  return { voice, speak, cancel, available: typeof window !== 'undefined' && !!window.speechSynthesis };
+}
+
+/* Speech-to-text. Triggers onResult with the recognized transcript
+   when the user stops speaking. */
+function useDictation(onResult) {
+  const recRef = useRef(null);
+  const [listening, setListening] = useState(false);
+  const [error, setError] = useState(null);
+
+  const start = useCallback(() => {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      setError('Voice input not supported in this browser. Try Chrome or Edge.');
+      return;
+    }
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.continuous = false;
+    rec.interimResults = false;
+    rec.maxAlternatives = 1;
+    rec.onresult = (e) => {
+      const text = e.results[0]?.[0]?.transcript || '';
+      if (text) onResult(text);
+    };
+    rec.onerror = (e) => {
+      if (e.error === 'no-speech' || e.error === 'aborted') return;
+      setError(`mic: ${e.error}`);
+    };
+    rec.onend = () => setListening(false);
+    try {
+      rec.start();
+      setListening(true);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    }
+    recRef.current = rec;
+  }, [onResult]);
+
+  const stop = useCallback(() => {
+    recRef.current?.stop();
+    setListening(false);
+  }, []);
+
+  const supported = typeof window !== 'undefined' &&
+    (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  return { listening, start, stop, error, supported };
+}
+
+/* ============================================================
    JARVIS CHAT
    ============================================================ */
 function JarvisPanel({ open, setOpen, sponsor, stats }) {
@@ -737,7 +834,11 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
   const [model, setModel] = useState(null);
+  const [voiceOn, setVoiceOn] = useState(true);
+  const [hasInteracted, setHasInteracted] = useState(false);
   const scrollRef = useRef(null);
+
+  const { voice, speak, cancel } = useBritishVoice();
 
   // Seed greeting once we have stats
   useEffect(() => {
@@ -758,9 +859,10 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, thinking]);
 
-  const send = async () => {
-    const text = input.trim();
+  const send = async (overrideText) => {
+    const text = (overrideText ?? input).trim();
     if (!text) return;
+    setHasInteracted(true);
     const next = [...messages, { role: 'user', content: text }];
     setMessages(next);
     setInput('');
@@ -769,17 +871,41 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
       const res = await api.jarvis(next);
       setMessages([...next, { role: 'jarvis', content: res.text }]);
       setModel(res.model);
+      if (voiceOn) speak(res.text);
     } catch (err) {
-      setMessages([...next, { role: 'jarvis', content: `Comm error: ${err.message}` }]);
+      const errMsg = `Comm error: ${err.message}`;
+      setMessages([...next, { role: 'jarvis', content: errMsg }]);
+      if (voiceOn) speak(errMsg);
     } finally {
       setThinking(false);
     }
   };
 
-  const liveHint = model === 'simulated'
+  const dictation = useDictation((text) => {
+    // Auto-submit recognized speech (Siri-style).
+    setInput(text);
+    send(text);
+  });
+
+  const toggleMic = () => {
+    setHasInteracted(true);
+    if (dictation.listening) dictation.stop();
+    else dictation.start();
+  };
+
+  const toggleVoice = () => {
+    setVoiceOn((v) => {
+      if (v) cancel();
+      return !v;
+    });
+  };
+
+  const liveHint = !hasInteracted && voiceOn
+    ? 'Voice on. Tap mic to talk, or type.'
+    : model === 'simulated'
     ? 'Simulated mode. Set ANTHROPIC_API_KEY to enable live JARVIS.'
     : model
-    ? `Live · ${model}`
+    ? `Live · ${model}${voice ? ` · ${voice.name}` : ''}`
     : 'Ready.';
 
   return (
@@ -787,7 +913,22 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
       title="J.A.R.V.I.S."
       icon={Cpu}
       accent={COLORS.cyan}
-      right={<button onClick={() => setOpen(!open)} style={styles.collapseBtn}>{open ? '−' : '+'}</button>}
+      right={
+        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+          <button
+            onClick={toggleVoice}
+            title={voiceOn ? 'Mute voice' : 'Unmute voice'}
+            style={{
+              ...styles.collapseBtn,
+              color: voiceOn ? COLORS.cyan : COLORS.textDim,
+              borderColor: voiceOn ? COLORS.cyanDim : COLORS.border,
+            }}
+          >
+            {voiceOn ? <Volume2 size={11} /> : <VolumeX size={11} />}
+          </button>
+          <button onClick={() => setOpen(!open)} style={styles.collapseBtn}>{open ? '−' : '+'}</button>
+        </div>
+      }
     >
       {open && (
         <>
@@ -796,8 +937,44 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
               <ChatBubble key={i} role={m.role} text={m.content} />
             ))}
             {thinking && <ChatBubble role="jarvis" text="…" />}
+            {dictation.listening && (
+              <div style={{ ...styles.chatBubble, alignSelf: 'flex-end' }}>
+                <div style={styles.chatBubbleLabel}>SHANE</div>
+                <div style={{
+                  ...styles.chatBubbleText,
+                  color: COLORS.red, borderColor: COLORS.redDim,
+                  display: 'flex', alignItems: 'center', gap: 8,
+                }}>
+                  <span style={{ ...styles.micPulse, background: COLORS.red, boxShadow: `0 0 8px ${COLORS.red}` }} />
+                  listening…
+                </div>
+              </div>
+            )}
+            {dictation.error && (
+              <div style={{ ...styles.chatBubble, alignSelf: 'flex-start' }}>
+                <div style={styles.chatBubbleLabel}>JARVIS</div>
+                <div style={{ ...styles.chatBubbleText, color: COLORS.red, borderColor: COLORS.redDim }}>
+                  {dictation.error}
+                </div>
+              </div>
+            )}
           </div>
           <div style={styles.chatInputRow}>
+            {dictation.supported && (
+              <button
+                onClick={toggleMic}
+                title={dictation.listening ? 'Stop listening' : 'Talk to JARVIS'}
+                style={{
+                  ...styles.micBtn,
+                  color: dictation.listening ? COLORS.bg : COLORS.cyan,
+                  background: dictation.listening ? COLORS.red : 'rgba(0,0,0,0.3)',
+                  borderColor: dictation.listening ? COLORS.red : COLORS.cyanDim,
+                  animation: dictation.listening ? 'pulse 1.2s infinite' : undefined,
+                }}
+              >
+                {dictation.listening ? <MicOff size={12} /> : <Mic size={12} />}
+              </button>
+            )}
             <input
               value={input}
               placeholder={sponsor ? `ask about ${sponsor.name}...` : 'ask jarvis...'}
@@ -805,7 +982,7 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
               onKeyDown={(e) => e.key === 'Enter' && send()}
               style={styles.chatInput}
             />
-            <button onClick={send} style={styles.chatSend}><Send size={12} /></button>
+            <button onClick={() => send()} style={styles.chatSend}><Send size={12} /></button>
           </div>
           <div style={styles.chatHint}>
             <Sparkles size={9} /> {liveHint}
@@ -1006,6 +1183,8 @@ const styles = {
   chatInputRow: { display: 'flex', gap: 6 },
   chatInput: { flex: 1, background: 'rgba(0,0,0,0.3)', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.text, fontFamily: FONT_MONO, fontSize: 11, padding: '7px 10px', outline: 'none', borderRadius: 2 },
   chatSend: { background: COLORS.cyan, color: COLORS.bg, border: 'none', padding: '0 12px', display: 'flex', alignItems: 'center', borderRadius: 2 },
+  micBtn: { border: '1px solid', padding: '0 11px', display: 'flex', alignItems: 'center', borderRadius: 2, transition: 'all 0.15s' },
+  micPulse: { width: 8, height: 8, borderRadius: '50%', display: 'inline-block', animation: 'pulse 1s infinite' },
   chatHint: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 8, color: COLORS.textDim, letterSpacing: '0.14em', marginTop: 8 },
   collapseBtn: { background: 'transparent', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.cyan, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 2, fontSize: 14, lineHeight: 1 },
 };
