@@ -30,6 +30,7 @@ import { HARD_RULES, EVENTS, HARD_BOUNCES_DEFAULT } from './sponsors.js';
 import { chat as jarvisChat, isEnabled as jarvisEnabled } from './jarvis.js';
 import { isEnabled as ttsEnabled, streamTTS } from './tts.js';
 import { sendEmail, saveDraft, checkBlocked, getSentLog, ccAddress } from './email.js';
+import { getTodayStats } from './stats.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -243,6 +244,17 @@ app.post('/api/jarvis/check', (req, res) => {
 /* ---------- sent log ---------- */
 app.get('/api/email/log', async (_req, res) => {
   res.json({ entries: await getSentLog() });
+});
+
+/* ---------- today's traffic (sent + received counts across all inboxes) ---------- */
+app.get('/api/stats/today', async (req, res) => {
+  try {
+    const stats = await getTodayStats({ force: req.query.refresh === '1' });
+    res.json(stats);
+  } catch (err) {
+    console.error('today stats failed:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /* ---------- jarvis voice (ElevenLabs) ---------- */

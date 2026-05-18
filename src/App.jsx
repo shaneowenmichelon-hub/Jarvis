@@ -82,6 +82,7 @@ export default function App() {
   const [lastSync, setLastSync] = useState(null);
   const [deepSync, setDeepSync] = useState({ running: false, progress: null, lastResult: null, lastDeepSync: null });
   const [toast, setToast] = useState(null);
+  const [todayStats, setTodayStats] = useState({ connected: false, sent: 0, received: 0, perAccount: [], asOf: null });
 
   /* live clock — pure aesthetic */
   useEffect(() => {
@@ -120,6 +121,23 @@ export default function App() {
     const t = setInterval(() => loadAll(), POLL_INTERVAL_MS);
     return () => clearInterval(t);
   }, [loadAll]);
+
+  /* Today's email volume — separate poll so it can refresh on its own
+     cadence without piggybacking on the heavier pipeline reload. */
+  useEffect(() => {
+    let cancelled = false;
+    const fetchStats = async () => {
+      try {
+        const stats = await api.todayStats();
+        if (!cancelled) setTodayStats(stats);
+      } catch {
+        /* swallow — TodayPanel handles disconnected state */
+      }
+    };
+    fetchStats();
+    const t = setInterval(fetchStats, POLL_INTERVAL_MS);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [authStatus.connected]);
 
   /* handle OAuth redirect (?connected=1 after callback) */
   useEffect(() => {
@@ -243,6 +261,7 @@ export default function App() {
       <div style={styles.mainGrid}>
         <div style={styles.col}>
           <KpiPanel stats={stats} loading={loading} />
+          <TodayPanel data={todayStats} now={now} />
           <AccountsPanel
             authStatus={authStatus}
             onAddAccount={connectGmail}
@@ -509,6 +528,72 @@ function KpiCard({ label, value, sub, color, icon: Icon }) {
       <div style={{ ...styles.kpiBar, background: color + '22' }}>
         <div style={{ ...styles.kpiBarFill, background: color, width: '70%' }} />
       </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   TODAY PANEL — email volume across all connected inboxes
+   ============================================================ */
+function TodayPanel({ data, now }) {
+  const todayLabel = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).toUpperCase();
+  const ratio = data.received > 0 ? data.sent / data.received : null;
+
+  return (
+    <Panel
+      title="TODAY"
+      icon={Activity}
+      accent={COLORS.cyan}
+      right={<span style={{ color: COLORS.textDim, fontSize: 9, letterSpacing: '0.18em' }}>{todayLabel}</span>}
+    >
+      {!data.connected ? (
+        <div style={styles.emptyMsg}>
+          <Link2 size={14} color={COLORS.textDim} />
+          <span>CONNECT GMAIL TO TRACK VOLUME.</span>
+        </div>
+      ) : (
+        <>
+          <div style={styles.todayTotals}>
+            <TodayStat icon={Send}  label="SENT"     value={data.sent}     color={COLORS.cyan} />
+            <TodayStat icon={Inbox} label="RECEIVED" value={data.received} color={COLORS.green} />
+          </div>
+          {ratio != null && (
+            <div style={styles.todayRatio}>
+              Reply ratio: {(ratio * 100).toFixed(0)}% sent vs received
+            </div>
+          )}
+          {data.perAccount.length > 1 && (
+            <div style={styles.todayByAccount}>
+              {data.perAccount.map((a) => (
+                <div key={a.email} style={styles.todayAcctRow}>
+                  <div style={styles.todayAcctEmail}>{a.email}</div>
+                  <div style={styles.todayAcctNums}>
+                    <span style={{ color: COLORS.cyan }}>↑ {a.sent}</span>
+                    <span style={{ color: COLORS.green }}>↓ {a.received}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {data.asOf && (
+            <div style={styles.todayAsOf}>
+              UPDATED {relativeTime(data.asOf, now)}
+            </div>
+          )}
+        </>
+      )}
+    </Panel>
+  );
+}
+
+function TodayStat({ icon: Icon, label, value, color }) {
+  return (
+    <div style={{ ...styles.todayStat, borderColor: color + '44' }}>
+      <div style={styles.todayStatLabel}>
+        <Icon size={11} color={color} />
+        <span style={{ color }}>{label}</span>
+      </div>
+      <div style={{ ...styles.todayStatValue, color }}>{value}</div>
     </div>
   );
 }
@@ -1666,6 +1751,17 @@ const styles = {
   rowStage: { border: '1px solid', padding: '2px 7px', fontSize: 8, letterSpacing: '0.18em', borderRadius: 2 },
   rowMeta: { display: 'flex', gap: 10, fontSize: 9.5, letterSpacing: '0.06em', alignItems: 'center', marginTop: 2 },
   autoBadge: { fontSize: 7, color: COLORS.cyan, border: `1px solid ${COLORS.cyanDim}`, padding: '1px 4px', letterSpacing: '0.2em', borderRadius: 2, marginLeft: 6 },
+
+  todayTotals: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
+  todayStat: { border: '1px solid', padding: 10, background: 'rgba(0,0,0,0.2)' },
+  todayStatLabel: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, letterSpacing: '0.18em', marginBottom: 6 },
+  todayStatValue: { fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 26, letterSpacing: '0.04em', lineHeight: 1 },
+  todayRatio: { fontSize: 9.5, color: COLORS.textDim, letterSpacing: '0.04em', marginTop: 10, textAlign: 'center' },
+  todayByAccount: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10, paddingTop: 10, borderTop: `1px solid ${COLORS.border}` },
+  todayAcctRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10 },
+  todayAcctEmail: { color: COLORS.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 },
+  todayAcctNums: { display: 'flex', gap: 10, flexShrink: 0 },
+  todayAsOf: { fontSize: 8, color: COLORS.textDim, letterSpacing: '0.18em', textAlign: 'center', marginTop: 8 },
 
   bounceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   bounceLabel: { fontSize: 9, color: COLORS.red, letterSpacing: '0.2em' },

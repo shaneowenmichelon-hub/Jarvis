@@ -31,5 +31,6 @@ export const api = {
   saveDraft:     (draft)        => req('/api/jarvis/draft', { method: 'POST', body: JSON.stringify(draft) }),
   checkDraft:    (draft)        => req('/api/jarvis/check', { method: 'POST', body: JSON.stringify(draft) }),
   sentLog:       ()             => req('/api/email/log'),
+  todayStats:    ({ force } = {}) => req(`/api/stats/today${force ? '?refresh=1' : ''}`),
   setBounces:    (value)        => req('/api/meta/hard-bounces', { method: 'POST', body: JSON.stringify({ value }) }),
 };
