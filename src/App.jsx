@@ -69,7 +69,7 @@ const RULE_ICONS = { cc: Mail, block: Shield, intro: Users };
    ============================================================ */
 export default function App() {
   const [now, setNow] = useState(new Date());
-  const [authStatus, setAuthStatus] = useState({ connected: false, configured: false, user: null, lastSync: null });
+  const [authStatus, setAuthStatus] = useState({ connected: false, configured: false, accounts: [], primaryAccount: null, lastSync: null });
   const [meta, setMeta] = useState({ hardRules: [], events: [], hardBounces: 0 });
   const [sponsors, setSponsors] = useState([]);
   const [activeStage, setActiveStage] = useState('ALL');
@@ -157,6 +157,17 @@ export default function App() {
     await loadAll();
   };
 
+  const removeAccount = async (email) => {
+    if (!confirm(`Disconnect ${email}? Other accounts stay connected.`)) return;
+    await api.removeAccount(email);
+    await loadAll();
+  };
+
+  const setPrimaryAccount = async (email) => {
+    await api.setPrimary(email);
+    await loadAll();
+  };
+
   return (
     <div style={styles.shell}>
       <BackgroundFX />
@@ -169,6 +180,7 @@ export default function App() {
         onSync={() => loadAll({ forceSync: true })}
         onConnect={connectGmail}
         onDisconnect={disconnectGmail}
+        onAddAccount={connectGmail}
       />
 
       {!authStatus.configured && <SetupBanner />}
@@ -181,6 +193,12 @@ export default function App() {
       <div style={styles.mainGrid}>
         <div style={styles.col}>
           <KpiPanel stats={stats} loading={loading} />
+          <AccountsPanel
+            authStatus={authStatus}
+            onAddAccount={connectGmail}
+            onRemove={removeAccount}
+            onSetPrimary={setPrimaryAccount}
+          />
           <FollowUpPanel
             overdue={stats.overdue}
             dueSoon={stats.dueSoon}
@@ -213,6 +231,8 @@ export default function App() {
             setOpen={setChatOpen}
             sponsor={selected}
             stats={stats}
+            accounts={authStatus.accounts || []}
+            primaryAccount={authStatus.primaryAccount}
           />
         </div>
       </div>
@@ -292,14 +312,17 @@ function BackgroundFX() {
 /* ============================================================
    TOP BAR
    ============================================================ */
-function TopBar({ now, stats, authStatus, lastSync, syncing, onSync, onConnect, onDisconnect }) {
+function TopBar({ now, stats, authStatus, lastSync, syncing, onSync, onConnect, onDisconnect, onAddAccount }) {
   const time = now.toLocaleTimeString('en-US', { hour12: false });
   const date = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
   const connected = authStatus.connected;
-  const userLine = authStatus.user?.email
-    ? authStatus.user.email.toUpperCase()
-    : 'SHANE MICHELON · PRES';
+  const accountCount = authStatus.accounts?.length || 0;
+  const userLine = accountCount === 0
+    ? 'SHANE MICHELON · PRES'
+    : accountCount === 1
+    ? authStatus.accounts[0].email.toUpperCase()
+    : `${accountCount} INBOXES CONNECTED`;
 
   return (
     <div style={styles.topBar}>
@@ -321,7 +344,7 @@ function TopBar({ now, stats, authStatus, lastSync, syncing, onSync, onConnect, 
       <div style={styles.topCenter}>
         <Pill icon={Power} color={COLORS.green} label="ONLINE" pulse />
         {connected ? (
-          <Pill icon={Wifi} color={COLORS.cyan} label="GMAIL LIVE" />
+          <Pill icon={Wifi} color={COLORS.cyan} label={accountCount > 1 ? `GMAIL ×${accountCount} LIVE` : 'GMAIL LIVE'} />
         ) : (
           <Pill icon={Wifi} color={COLORS.textDim} label="GMAIL OFFLINE" />
         )}
@@ -343,12 +366,10 @@ function TopBar({ now, stats, authStatus, lastSync, syncing, onSync, onConnect, 
         </button>
         {connected && (
           <button
-            onClick={onDisconnect}
-            title="Disconnect Gmail"
-            style={{ ...styles.iconBtn, color: COLORS.textDim, borderColor: COLORS.border }}
-          >
-            <LogOut size={11} />
-          </button>
+            onClick={onAddAccount}
+            title="Add another Gmail account"
+            style={{ ...styles.iconBtn, color: COLORS.cyan, borderColor: COLORS.cyanDim }}
+          >+</button>
         )}
       </div>
 
@@ -435,6 +456,67 @@ function KpiCard({ label, value, sub, color, icon: Icon }) {
         <div style={{ ...styles.kpiBarFill, background: color, width: '70%' }} />
       </div>
     </div>
+  );
+}
+
+/* ============================================================
+   ACCOUNTS PANEL
+   Manages connected Gmail inboxes — add, remove, set primary.
+   ============================================================ */
+function AccountsPanel({ authStatus, onAddAccount, onRemove, onSetPrimary }) {
+  const accounts = authStatus.accounts || [];
+  return (
+    <Panel
+      title="GMAIL INBOXES"
+      icon={Inbox}
+      accent={COLORS.cyan}
+      right={
+        authStatus.connected ? (
+          <button
+            onClick={onAddAccount}
+            style={{ ...styles.tinyBtn, color: COLORS.cyan, borderColor: COLORS.cyanDim }}
+            title="Add another inbox"
+          >+ ADD</button>
+        ) : null
+      }
+    >
+      {accounts.length === 0 ? (
+        <div style={styles.emptyMsg}>
+          <Link2 size={14} color={COLORS.textDim} />
+          <span>NO INBOXES CONNECTED.</span>
+        </div>
+      ) : (
+        <div style={styles.acctList}>
+          {accounts.map((a) => (
+            <div key={a.email} style={styles.acctRow}>
+              <div style={styles.acctMain}>
+                <div style={styles.acctEmail}>
+                  {a.email}
+                  {a.isPrimary && (
+                    <span style={styles.acctPrimary}>PRIMARY</span>
+                  )}
+                </div>
+                <div style={styles.acctName}>{a.name}</div>
+              </div>
+              <div style={styles.acctActions}>
+                {!a.isPrimary && (
+                  <button
+                    onClick={() => onSetPrimary(a.email)}
+                    title="Make primary sender"
+                    style={{ ...styles.tinyBtn, color: COLORS.orange, borderColor: COLORS.orangeDim }}
+                  >SET PRIMARY</button>
+                )}
+                <button
+                  onClick={() => onRemove(a.email)}
+                  title="Disconnect this inbox"
+                  style={{ ...styles.tinyBtn, color: COLORS.red, borderColor: COLORS.redDim }}
+                >✕</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Panel>
   );
 }
 
@@ -902,11 +984,22 @@ function useDictation(onResult) {
 /* ============================================================
    DRAFT CARD — review JARVIS's email draft, approve to send
    ============================================================ */
-function DraftCard({ draft, onUpdate, onSent, onDiscard }) {
+function DraftCard({ draft, accounts = [], defaultAccount, onUpdate, onSent, onDiscard }) {
   const [editing, setEditing] = useState(false);
   const [working, setWorking] = useState(null); // 'send' | 'draft' | null
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null); // { type: 'sent'|'draft', entry }
+  // Account selection — default to primary, fall back to first connected
+  const [fromAccount, setFromAccount] = useState(
+    defaultAccount || accounts[0]?.email || null,
+  );
+
+  // Keep fromAccount valid if accounts list changes (e.g. user disconnects one)
+  useEffect(() => {
+    if (fromAccount && !accounts.find((a) => a.email === fromAccount)) {
+      setFromAccount(defaultAccount || accounts[0]?.email || null);
+    }
+  }, [accounts, defaultAccount, fromAccount]);
 
   const handleField = (k) => (e) => onUpdate({ ...draft, [k]: e.target.value });
 
@@ -915,6 +1008,7 @@ function DraftCard({ draft, onUpdate, onSent, onDiscard }) {
     subject: draft.subject,
     body: draft.body,
     threadId: draft.threadId || undefined,
+    accountEmail: fromAccount || undefined,
   });
 
   const send = async () => {
@@ -979,6 +1073,24 @@ function DraftCard({ draft, onUpdate, onSent, onDiscard }) {
         {draft.reason && <span style={styles.draftReason}>{draft.reason}</span>}
       </div>
 
+      {accounts.length > 1 ? (
+        <div style={styles.draftField}>
+          <div style={styles.draftFieldLabel}>FROM</div>
+          <select
+            value={fromAccount || ''}
+            onChange={(e) => setFromAccount(e.target.value)}
+            style={styles.draftSelect}
+          >
+            {accounts.map((a) => (
+              <option key={a.email} value={a.email}>
+                {a.email}{a.isPrimary ? ' (primary)' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : accounts.length === 1 ? (
+        <DraftField label="FROM" value={accounts[0].email} editing={false} muted />
+      ) : null}
       <DraftField label="TO" value={draft.to} editing={editing} onChange={handleField('to')} />
       <DraftField label="CC" value="zach@zmmevents.com (enforced)" editing={false} muted />
       <DraftField label="SUBJECT" value={draft.subject} editing={editing} onChange={handleField('subject')} />
@@ -1044,7 +1156,7 @@ function DraftField({ label, value, editing, onChange, multiline, muted }) {
 /* ============================================================
    JARVIS CHAT
    ============================================================ */
-function JarvisPanel({ open, setOpen, sponsor, stats }) {
+function JarvisPanel({ open, setOpen, sponsor, stats, accounts = [], primaryAccount = null }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -1165,6 +1277,8 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
                 {m.draft && (
                   <DraftCard
                     draft={m.draft}
+                    accounts={accounts}
+                    defaultAccount={primaryAccount}
                     onUpdate={(d) => updateMessageDraft(i, d)}
                     onSent={(entry) =>
                       clearMessageDraft(
@@ -1435,7 +1549,17 @@ const styles = {
   draftFieldValue: { fontSize: 11, lineHeight: 1.5 },
   draftInput: { background: 'rgba(0,0,0,0.4)', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.text, fontFamily: FONT_MONO, fontSize: 11, padding: '6px 8px', outline: 'none', borderRadius: 2, resize: 'vertical' },
   draftError: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: COLORS.red, padding: '4px 0' },
-  draftActions: { display: 'flex', gap: 6, marginTop: 4 },
+  draftActions: { display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' },
+  draftSelect: { background: 'rgba(0,0,0,0.4)', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.text, fontFamily: FONT_MONO, fontSize: 11, padding: '5px 7px', outline: 'none', borderRadius: 2 },
+
+  acctList: { display: 'flex', flexDirection: 'column', gap: 6 },
+  acctRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, padding: '8px 10px', border: `1px solid ${COLORS.border}`, borderRadius: 2, background: 'rgba(0,0,0,0.2)' },
+  acctMain: { flex: 1, minWidth: 0 },
+  acctEmail: { fontSize: 11, color: COLORS.text, display: 'flex', alignItems: 'center', gap: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+  acctName: { fontSize: 9, color: COLORS.textDim, letterSpacing: '0.08em', marginTop: 2 },
+  acctPrimary: { fontSize: 7, color: COLORS.orange, border: `1px solid ${COLORS.orangeDim}`, padding: '1px 5px', letterSpacing: '0.2em', borderRadius: 2 },
+  acctActions: { display: 'flex', gap: 4, alignItems: 'center' },
+  tinyBtn: { background: 'transparent', border: '1px solid', padding: '3px 7px', fontSize: 8, letterSpacing: '0.16em', fontFamily: FONT_MONO, fontWeight: 600, borderRadius: 2 },
   chatHint: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 8, color: COLORS.textDim, letterSpacing: '0.14em', marginTop: 8 },
   collapseBtn: { background: 'transparent', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.cyan, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 2, fontSize: 14, lineHeight: 1 },
 };

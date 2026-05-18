@@ -7,7 +7,7 @@
    in the dashboard; this module is what actually puts it on the wire. */
 
 import { google } from 'googleapis';
-import { getAuthorizedClient } from './auth.js';
+import { getAuthorizedClientFor, getPrimaryClient } from './auth.js';
 import { loadStore, updateStore } from './store.js';
 
 const CC_ALWAYS = process.env.CC_ALWAYS || 'zach@zmmevents.com';
@@ -56,7 +56,25 @@ function buildMime({ to, cc, from, subject, body }) {
 
 /* Internal: build the Gmail-ready MIME + resolve from / hard-rule check.
    Shared by sendEmail and saveDraft so behavior is identical. */
-async function buildGmailMessage({ to, subject, body }) {
+/* Resolve which Gmail account to send from. Accepts an explicit
+   accountEmail (when the user picks one from the draft card) or
+   falls back to the primary account. */
+async function resolveAccount(accountEmail) {
+  if (accountEmail) {
+    const client = await getAuthorizedClientFor(accountEmail);
+    if (!client) throw new Error(`Account ${accountEmail} not connected.`);
+    const store = await loadStore();
+    const acct = store.accounts?.[accountEmail];
+    return { email: accountEmail, name: acct?.name || accountEmail, client };
+  }
+  const primary = await getPrimaryClient();
+  if (!primary) throw new Error('Gmail not connected. Click Connect Gmail to authorize.');
+  const store = await loadStore();
+  const acct = store.accounts?.[primary.email];
+  return { email: primary.email, name: acct?.name || primary.email, client: primary.client };
+}
+
+async function buildGmailMessage({ to, subject, body, accountEmail }) {
   if (!to || !subject || !body) throw new Error('to, subject, and body are required');
 
   const blocked = checkBlocked({ to, cc: CC_ALWAYS, subject, body });
@@ -66,18 +84,11 @@ async function buildGmailMessage({ to, subject, body }) {
     throw err;
   }
 
-  const client = await getAuthorizedClient();
-  if (!client) throw new Error('Gmail not connected.');
-
-  const store = await loadStore();
-  const fromEmail = store.user?.email;
-  if (!fromEmail) throw new Error('User email unknown — reconnect Gmail.');
-  const fromName = store.user?.name || 'Shane Michelon';
-  const from = `${fromName} <${fromEmail}>`;
-
+  const { email, name, client } = await resolveAccount(accountEmail);
+  const from = `${name} <${email}>`;
   const gmail = google.gmail({ version: 'v1', auth: client });
   const raw = buildMime({ to, cc: CC_ALWAYS, from, subject, body });
-  return { gmail, raw, store };
+  return { gmail, raw, account: { email, name } };
 }
 
 async function appendLog(entry) {
@@ -86,8 +97,8 @@ async function appendLog(entry) {
   await updateStore({ sentLog: log });
 }
 
-export async function sendEmail({ to, subject, body, threadId }) {
-  const { gmail, raw } = await buildGmailMessage({ to, subject, body });
+export async function sendEmail({ to, subject, body, threadId, accountEmail }) {
+  const { gmail, raw, account } = await buildGmailMessage({ to, subject, body, accountEmail });
 
   const result = await gmail.users.messages.send({
     userId: 'me',
@@ -98,6 +109,7 @@ export async function sendEmail({ to, subject, body, threadId }) {
     id: result.data.id,
     threadId: result.data.threadId,
     type: 'sent',
+    account: account.email,
     to,
     cc: CC_ALWAYS,
     subject,
@@ -108,24 +120,20 @@ export async function sendEmail({ to, subject, body, threadId }) {
   return entry;
 }
 
-/* Save the email as a draft in the user's Gmail Drafts folder.
-   They can review and send from any Gmail client. Hard rules still
-   apply: CC is added, Constellation is blocked. */
-export async function saveDraft({ to, subject, body, threadId }) {
-  const { gmail, raw } = await buildGmailMessage({ to, subject, body });
+export async function saveDraft({ to, subject, body, threadId, accountEmail }) {
+  const { gmail, raw, account } = await buildGmailMessage({ to, subject, body, accountEmail });
 
   const result = await gmail.users.drafts.create({
     userId: 'me',
-    requestBody: {
-      message: { raw, ...(threadId ? { threadId } : {}) },
-    },
+    requestBody: { message: { raw, ...(threadId ? { threadId } : {}) } },
   });
 
   const entry = {
-    id: result.data.id,                          // draft ID
-    messageId: result.data.message?.id,          // underlying message ID
+    id: result.data.id,
+    messageId: result.data.message?.id,
     threadId: result.data.message?.threadId,
     type: 'draft',
+    account: account.email,
     to,
     cc: CC_ALWAYS,
     subject,

@@ -13,13 +13,16 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const STORE_PATH = resolve(__dirname, '..', 'data', 'store.json');
 
 const DEFAULT = {
-  tokens: null,        // { access_token, refresh_token, expiry_date, scope, token_type }
-  user: null,          // { email, name }
-  lastSync: null,      // ISO timestamp
-  threadState: {},     // { [sponsorId]: { lastOutbound, lastInbound, threadCount, threadIds } }
-  overrides: {},       // { [sponsorId]: { stage?, value?, notes?, status? } } — manual edits
-  hardBounces: null,   // number — manual override of bounce count
-  sentLog: [],         // [{ type: 'sent'|'draft', to, cc, subject, ... }] — audit trail
+  /* Multi-account map: { [email]: { name, tokens, addedAt } }.
+     Each account has its own OAuth tokens (with refresh_token + scope).
+     primaryAccount is which one is used as the default sender. */
+  accounts: {},
+  primaryAccount: null,
+  lastSync: null,
+  threadState: {},     // { [sponsorId]: { lastOutbound, lastInbound, threadCount, threads: [{ account, threadId }] } }
+  overrides: {},
+  hardBounces: null,
+  sentLog: [],
 };
 
 const USE_PG = Boolean(process.env.DATABASE_URL);
@@ -91,10 +94,35 @@ async function fileSave(data) {
   await writeFile(STORE_PATH, JSON.stringify(data, null, 2), 'utf8');
 }
 
+/* Migrates the old single-account shape ({ tokens, user }) into the
+   new multi-account shape ({ accounts, primaryAccount }) on first load.
+   Idempotent — running on already-new data is a no-op. */
+function migrate(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+  if (raw.tokens && raw.user?.email && (!raw.accounts || !Object.keys(raw.accounts).length)) {
+    raw.accounts = {
+      [raw.user.email]: {
+        name: raw.user.name || raw.user.email,
+        tokens: raw.tokens,
+        addedAt: new Date().toISOString(),
+      },
+    };
+    raw.primaryAccount = raw.user.email;
+  }
+  delete raw.tokens;
+  delete raw.user;
+  return raw;
+}
+
 export async function loadStore() {
   if (cache) return cache;
   const raw = USE_PG ? await pgLoad() : await fileLoad();
-  cache = { ...DEFAULT, ...raw };
+  const migrated = migrate(raw);
+  cache = { ...DEFAULT, ...migrated };
+  // If we migrated, persist the new shape so subsequent reads are clean.
+  if (raw !== migrated || (raw.tokens === undefined && !cache.accounts)) {
+    // no-op safeguard; the actual persist happens on first updateStore.
+  }
   return cache;
 }
 
@@ -110,9 +138,45 @@ export async function updateStore(patch) {
   return cache;
 }
 
-export async function setTokens(tokens)    { return updateStore({ tokens }); }
-export async function clearTokens()        { return updateStore({ tokens: null, user: null, threadState: {}, lastSync: null }); }
-export async function setUser(user)        { return updateStore({ user }); }
+/* ---- multi-account helpers ---- */
+
+export async function addAccount({ email, name, tokens }) {
+  if (!email) throw new Error('email required');
+  await loadStore();
+  const accounts = { ...cache.accounts, [email]: { name: name || email, tokens, addedAt: cache.accounts[email]?.addedAt || new Date().toISOString() } };
+  const primaryAccount = cache.primaryAccount || email;
+  return updateStore({ accounts, primaryAccount });
+}
+
+export async function updateAccountTokens(email, tokens) {
+  await loadStore();
+  const existing = cache.accounts[email];
+  if (!existing) return;
+  const accounts = { ...cache.accounts, [email]: { ...existing, tokens: { ...existing.tokens, ...tokens } } };
+  return updateStore({ accounts });
+}
+
+export async function removeAccount(email) {
+  await loadStore();
+  const accounts = { ...cache.accounts };
+  delete accounts[email];
+  const remainingEmails = Object.keys(accounts);
+  const primaryAccount = cache.primaryAccount === email
+    ? (remainingEmails[0] || null)
+    : cache.primaryAccount;
+  return updateStore({ accounts, primaryAccount });
+}
+
+export async function setPrimaryAccount(email) {
+  await loadStore();
+  if (!cache.accounts[email]) throw new Error(`unknown account: ${email}`);
+  return updateStore({ primaryAccount: email });
+}
+
+export async function clearAllAccounts() {
+  return updateStore({ accounts: {}, primaryAccount: null, threadState: {}, lastSync: null });
+}
+
 export async function setThreadState(s, t) { return updateStore({ threadState: s, lastSync: t }); }
 export async function setHardBounces(n)    { return updateStore({ hardBounces: n }); }
 

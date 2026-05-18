@@ -17,7 +17,15 @@ import {
   REQUIRED_SCOPE_KEYS,
 } from './auth.js';
 import { getStatus, syncAllSponsors, getEnrichedSponsors } from './gmail.js';
-import { loadStore, clearTokens, setOverride, setHardBounces, storageBackend } from './store.js';
+import {
+  loadStore,
+  setOverride,
+  setHardBounces,
+  storageBackend,
+  removeAccount,
+  clearAllAccounts,
+  setPrimaryAccount,
+} from './store.js';
 import { HARD_RULES, EVENTS, HARD_BOUNCES_DEFAULT } from './sponsors.js';
 import { chat as jarvisChat, isEnabled as jarvisEnabled } from './jarvis.js';
 import { isEnabled as ttsEnabled, streamTTS } from './tts.js';
@@ -62,14 +70,36 @@ app.post('/api/meta/hard-bounces', async (req, res) => {
 /* ---------- auth ---------- */
 app.get('/api/auth/status', async (_req, res) => {
   if (!oauthConfigured()) {
-    return res.json({ connected: false, configured: false, hint: 'Set GOOGLE_CLIENT_ID/SECRET in .env' });
+    return res.json({ connected: false, configured: false, accounts: [], hint: 'Set GOOGLE_CLIENT_ID/SECRET in .env' });
   }
   const status = await getStatus();
+  // Each account is checked for the required scope individually so a
+  // partially-authorized add (e.g. an old account before gmail.compose
+  // was required) flags itself for re-auth.
+  const accountsWithScope = status.accounts.map((a) => {
+    const store = a; // already shaped from getStatus
+    return { ...store };
+  });
+  // Build canSend / missingScopes from the union of granted scopes.
   const store = await loadStore();
-  const scopes = grantedScopeKeys(store.tokens);
-  const canSend = scopes.includes('gmail.compose');
-  const missingScopes = REQUIRED_SCOPE_KEYS.filter((s) => !scopes.includes(s));
-  res.json({ ...status, configured: true, scopes, canSend, missingScopes, ccAddress: ccAddress() });
+  const allScopes = new Set();
+  for (const email of Object.keys(store.accounts || {})) {
+    const tokens = store.accounts[email]?.tokens;
+    for (const s of grantedScopeKeys(tokens)) allScopes.add(s);
+  }
+  // canSend requires the primary account specifically to have gmail.compose
+  const primaryTokens = store.primaryAccount ? store.accounts[store.primaryAccount]?.tokens : null;
+  const primaryScopes = grantedScopeKeys(primaryTokens);
+  const canSend = primaryScopes.includes('gmail.compose');
+  const missingScopes = REQUIRED_SCOPE_KEYS.filter((s) => !primaryScopes.includes(s));
+  res.json({
+    ...status,
+    configured: true,
+    canSend,
+    missingScopes,
+    scopes: [...allScopes],
+    ccAddress: ccAddress(),
+  });
 });
 
 app.get('/auth/google', (_req, res) => {
@@ -94,8 +124,27 @@ app.get('/auth/google/callback', async (req, res) => {
 });
 
 app.post('/api/auth/logout', async (_req, res) => {
-  await clearTokens();
+  await clearAllAccounts();
   res.json({ ok: true });
+});
+
+/* Disconnect one specific account (by email). The others stay connected. */
+app.delete('/api/auth/account/:email', async (req, res) => {
+  await removeAccount(req.params.email);
+  res.json({ ok: true });
+});
+
+/* Choose which connected account is the default sender for SEND NOW /
+   SAVE DRAFT when the user doesn't pick one explicitly. */
+app.post('/api/auth/primary', async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: 'email required' });
+  try {
+    await setPrimaryAccount(email);
+    res.json({ ok: true, primaryAccount: email });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 /* ---------- sponsors ---------- */
@@ -148,8 +197,8 @@ app.post('/api/jarvis/chat', async (req, res) => {
 /* ---------- jarvis send (approved draft → out the door) ---------- */
 app.post('/api/jarvis/send', async (req, res) => {
   try {
-    const { to, subject, body, threadId } = req.body || {};
-    const entry = await sendEmail({ to, subject, body, threadId });
+    const { to, subject, body, threadId, accountEmail } = req.body || {};
+    const entry = await sendEmail({ to, subject, body, threadId, accountEmail });
     res.json({ ok: true, entry, cc: ccAddress() });
   } catch (err) {
     console.error('Send failed:', err);
@@ -161,8 +210,8 @@ app.post('/api/jarvis/send', async (req, res) => {
 /* ---------- jarvis save-to-drafts (lands in your Gmail Drafts folder) ---------- */
 app.post('/api/jarvis/draft', async (req, res) => {
   try {
-    const { to, subject, body, threadId } = req.body || {};
-    const entry = await saveDraft({ to, subject, body, threadId });
+    const { to, subject, body, threadId, accountEmail } = req.body || {};
+    const entry = await saveDraft({ to, subject, body, threadId, accountEmail });
     res.json({ ok: true, entry, cc: ccAddress() });
   } catch (err) {
     console.error('Save draft failed:', err);

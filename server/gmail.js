@@ -1,16 +1,14 @@
-/* Gmail sync — for each configured sponsor, search Gmail for threads
-   involving that sponsor's contact email, then derive:
-     - lastOutbound: most recent message from the user
-     - lastInbound:  most recent message from anyone else
-     - threadCount:  number of distinct threads
-     - threadIds:    list of Gmail thread IDs (so the UI can deep-link)
-
-   Calls are metadata-only and capped to MAX_THREADS_PER_SPONSOR to
-   stay well inside Gmail API quota (1B units/day, 250 units/user/s).
-   Each thread metadata fetch costs 10 quota units. */
+/* Gmail sync — multi-account aware. For each connected Gmail account,
+   for each sponsor with a contact email, fetch recent thread metadata
+   and aggregate:
+     - lastOutbound: most recent message FROM any of our accounts
+     - lastInbound:  most recent message NOT from our accounts
+     - threadCount:  total threads across all our accounts
+     - threads:      [{ account, threadId, last }] for "open in Gmail" links
+   Rate-limited so multiple callers within MIN_INTERVAL share one fetch. */
 
 import { google } from 'googleapis';
-import { getAuthorizedClient } from './auth.js';
+import { getAllAuthorizedClients } from './auth.js';
 import { loadStore, setThreadState } from './store.js';
 import { SPONSORS, computeFollowUp } from './sponsors.js';
 
@@ -22,16 +20,21 @@ let inFlight = null;
 
 export async function getStatus() {
   const store = await loadStore();
+  const accounts = Object.entries(store.accounts || {}).map(([email, a]) => ({
+    email,
+    name: a.name,
+    addedAt: a.addedAt,
+    isPrimary: store.primaryAccount === email,
+  }));
   return {
-    connected: Boolean(store.tokens),
-    user: store.user,
+    connected: accounts.length > 0,
+    accounts,
+    primaryAccount: store.primaryAccount,
     lastSync: store.lastSync,
     sponsorsSynced: Object.keys(store.threadState || {}).length,
   };
 }
 
-/* Sync all sponsors. Returns the new threadState map.
-   Rate-limited — multiple callers within MIN_INTERVAL share one fetch. */
 export async function syncAllSponsors({ force = false } = {}) {
   if (inFlight) return inFlight;
   const now = Date.now();
@@ -42,22 +45,36 @@ export async function syncAllSponsors({ force = false } = {}) {
 
   inFlight = (async () => {
     try {
-      const client = await getAuthorizedClient();
-      if (!client) return { threadState: {}, lastSync: null, connected: false };
+      const clients = await getAllAuthorizedClients();
+      if (clients.length === 0) {
+        return { threadState: {}, lastSync: null, connected: false };
+      }
 
-      const gmail = google.gmail({ version: 'v1', auth: client });
+      const ourEmails = clients.map((c) => c.email.toLowerCase());
       const store = await loadStore();
-      const userEmail = (store.user?.email || '').toLowerCase();
-
       const threadState = { ...store.threadState };
 
       for (const sponsor of SPONSORS) {
-        if (!sponsor.contact) continue; // BLOCKED entries skipped
-        try {
-          threadState[sponsor.id] = await syncSponsor(gmail, sponsor, userEmail);
-        } catch (err) {
-          console.error(`[sync] ${sponsor.name} failed:`, err.message);
+        if (!sponsor.contact) continue;
+        const merged = { lastOutbound: null, lastInbound: null, threads: [], threadCount: 0 };
+        let lastOutTs = 0;
+        let lastInTs = 0;
+
+        for (const { email, client } of clients) {
+          try {
+            const partial = await syncSponsorForAccount(client, sponsor, ourEmails);
+            if (partial.lastOutboundTs && partial.lastOutboundTs > lastOutTs) lastOutTs = partial.lastOutboundTs;
+            if (partial.lastInboundTs && partial.lastInboundTs > lastInTs) lastInTs = partial.lastInboundTs;
+            for (const t of partial.threads) merged.threads.push({ account: email, threadId: t });
+          } catch (err) {
+            console.error(`[sync] ${sponsor.name} via ${email} failed:`, err.message);
+          }
         }
+
+        merged.lastOutbound = lastOutTs ? new Date(lastOutTs).toISOString() : null;
+        merged.lastInbound = lastInTs ? new Date(lastInTs).toISOString() : null;
+        merged.threadCount = merged.threads.length;
+        threadState[sponsor.id] = merged;
       }
 
       const lastSync = new Date().toISOString();
@@ -72,7 +89,8 @@ export async function syncAllSponsors({ force = false } = {}) {
   return inFlight;
 }
 
-async function syncSponsor(gmail, sponsor, userEmail) {
+async function syncSponsorForAccount(client, sponsor, ourEmails) {
+  const gmail = google.gmail({ version: 'v1', auth: client });
   const q = `from:${sponsor.contact} OR to:${sponsor.contact}`;
   const list = await gmail.users.threads.list({
     userId: 'me',
@@ -81,9 +99,7 @@ async function syncSponsor(gmail, sponsor, userEmail) {
   });
 
   const threads = list.data.threads || [];
-  if (threads.length === 0) {
-    return { lastOutbound: null, lastInbound: null, threadCount: 0, threadIds: [] };
-  }
+  if (threads.length === 0) return { lastOutboundTs: 0, lastInboundTs: 0, threads: [] };
 
   let lastOutboundTs = 0;
   let lastInboundTs = 0;
@@ -102,23 +118,18 @@ async function syncSponsor(gmail, sponsor, userEmail) {
       const ts = Number(m.internalDate);
       if (!ts) continue;
       const headers = m.payload?.headers || [];
-      const from = headers.find((h) => h.name === 'From')?.value || '';
-      const isFromUser = userEmail && from.toLowerCase().includes(userEmail);
-      if (isFromUser && ts > lastOutboundTs) lastOutboundTs = ts;
-      if (!isFromUser && ts > lastInboundTs) lastInboundTs = ts;
+      const from = (headers.find((h) => h.name === 'From')?.value || '').toLowerCase();
+      const isFromUs = ourEmails.some((e) => from.includes(e));
+      if (isFromUs && ts > lastOutboundTs) lastOutboundTs = ts;
+      if (!isFromUs && ts > lastInboundTs) lastInboundTs = ts;
     }
   }
 
-  return {
-    lastOutbound: lastOutboundTs ? new Date(lastOutboundTs).toISOString() : null,
-    lastInbound: lastInboundTs ? new Date(lastInboundTs).toISOString() : null,
-    threadCount: threads.length,
-    threadIds,
-  };
+  return { lastOutboundTs, lastInboundTs, threads: threadIds };
 }
 
-/* Combine the static sponsor config + manual overrides + live thread state
-   into the shape the frontend renders. */
+/* Combine the static sponsor config + manual overrides + aggregated
+   thread state into the shape the frontend renders. */
 export async function getEnrichedSponsors() {
   const store = await loadStore();
   return SPONSORS.map((sponsor) => {
@@ -128,14 +139,17 @@ export async function getEnrichedSponsors() {
     const lastOutbound = thread?.lastOutbound ?? null;
     const lastInbound = thread?.lastInbound ?? null;
     const threadCount = thread?.threadCount ?? 0;
-    const threadIds = thread?.threadIds ?? [];
-    const followUpDue = computeFollowUp(merged, thread);
+    const threads = thread?.threads ?? [];
+    // Back-compat for older renderers that only knew threadIds:
+    const threadIds = threads.map((t) => t.threadId);
+    const followUpDue = computeFollowUp(merged, { lastOutbound, lastInbound });
     return {
       ...merged,
       lastOutbound,
       lastInbound,
       threadCount,
-      threadIds,
+      threads,        // [{ account, threadId }]
+      threadIds,      // [threadId]
       followUpDue,
     };
   });
