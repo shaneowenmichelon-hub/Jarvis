@@ -8,7 +8,10 @@ services:
     name: zmm-sponsor-command
     runtime: node
     plan: free
-    buildCommand: npm install && npm run build
+    # --include=dev is required because Vite + @vitejs/plugin-react live
+    # in devDependencies and NODE_ENV=production (set below) would otherwise
+    # make npm skip them, breaking the build.
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
