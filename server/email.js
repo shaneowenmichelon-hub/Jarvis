@@ -54,10 +54,10 @@ function buildMime({ to, cc, from, subject, body }) {
   return Buffer.from(raw, 'utf8').toString('base64url');
 }
 
-export async function sendEmail({ to, subject, body, threadId }) {
-  if (!to || !subject || !body) {
-    throw new Error('to, subject, and body are required');
-  }
+/* Internal: build the Gmail-ready MIME + resolve from / hard-rule check.
+   Shared by sendEmail and saveDraft so behavior is identical. */
+async function buildGmailMessage({ to, subject, body }) {
+  if (!to || !subject || !body) throw new Error('to, subject, and body are required');
 
   const blocked = checkBlocked({ to, cc: CC_ALWAYS, subject, body });
   if (blocked) {
@@ -77,6 +77,17 @@ export async function sendEmail({ to, subject, body, threadId }) {
 
   const gmail = google.gmail({ version: 'v1', auth: client });
   const raw = buildMime({ to, cc: CC_ALWAYS, from, subject, body });
+  return { gmail, raw, store };
+}
+
+async function appendLog(entry) {
+  const store = await loadStore();
+  const log = [entry, ...(store.sentLog || [])].slice(0, 200);
+  await updateStore({ sentLog: log });
+}
+
+export async function sendEmail({ to, subject, body, threadId }) {
+  const { gmail, raw } = await buildGmailMessage({ to, subject, body });
 
   const result = await gmail.users.messages.send({
     userId: 'me',
@@ -86,15 +97,42 @@ export async function sendEmail({ to, subject, body, threadId }) {
   const entry = {
     id: result.data.id,
     threadId: result.data.threadId,
+    type: 'sent',
     to,
     cc: CC_ALWAYS,
     subject,
     bodyPreview: body.slice(0, 200),
     sentAt: new Date().toISOString(),
   };
-  const log = [entry, ...(store.sentLog || [])].slice(0, 200);
-  await updateStore({ sentLog: log });
+  await appendLog(entry);
+  return entry;
+}
 
+/* Save the email as a draft in the user's Gmail Drafts folder.
+   They can review and send from any Gmail client. Hard rules still
+   apply: CC is added, Constellation is blocked. */
+export async function saveDraft({ to, subject, body, threadId }) {
+  const { gmail, raw } = await buildGmailMessage({ to, subject, body });
+
+  const result = await gmail.users.drafts.create({
+    userId: 'me',
+    requestBody: {
+      message: { raw, ...(threadId ? { threadId } : {}) },
+    },
+  });
+
+  const entry = {
+    id: result.data.id,                          // draft ID
+    messageId: result.data.message?.id,          // underlying message ID
+    threadId: result.data.message?.threadId,
+    type: 'draft',
+    to,
+    cc: CC_ALWAYS,
+    subject,
+    bodyPreview: body.slice(0, 200),
+    savedAt: new Date().toISOString(),
+  };
+  await appendLog(entry);
   return entry;
 }
 

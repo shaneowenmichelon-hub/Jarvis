@@ -904,36 +904,69 @@ function useDictation(onResult) {
    ============================================================ */
 function DraftCard({ draft, onUpdate, onSent, onDiscard }) {
   const [editing, setEditing] = useState(false);
-  const [sending, setSending] = useState(false);
+  const [working, setWorking] = useState(null); // 'send' | 'draft' | null
   const [error, setError] = useState(null);
-  const [sentEntry, setSentEntry] = useState(null);
+  const [done, setDone] = useState(null); // { type: 'sent'|'draft', entry }
 
   const handleField = (k) => (e) => onUpdate({ ...draft, [k]: e.target.value });
 
+  const payload = () => ({
+    to: draft.to,
+    subject: draft.subject,
+    body: draft.body,
+    threadId: draft.threadId || undefined,
+  });
+
   const send = async () => {
-    setSending(true);
+    setWorking('send');
     setError(null);
     try {
-      const res = await api.sendDraft({
-        to: draft.to,
-        subject: draft.subject,
-        body: draft.body,
-        threadId: draft.threadId || undefined,
-      });
-      setSentEntry(res.entry);
-      setTimeout(() => onSent(res.entry), 1200);
+      const res = await api.sendDraft(payload());
+      setDone({ type: 'sent', entry: res.entry });
+      setTimeout(() => onSent(res.entry), 1500);
     } catch (err) {
       setError(err.message);
     } finally {
-      setSending(false);
+      setWorking(null);
     }
   };
 
-  if (sentEntry) {
+  const saveDraft = async () => {
+    setWorking('draft');
+    setError(null);
+    try {
+      const res = await api.saveDraft(payload());
+      setDone({ type: 'draft', entry: res.entry });
+      setTimeout(() => onSent(res.entry), 2500);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setWorking(null);
+    }
+  };
+
+  if (done?.type === 'sent') {
     return (
       <div style={{ ...styles.draftCard, borderColor: COLORS.greenDim }}>
         <div style={{ ...styles.draftHeader, color: COLORS.green }}>
-          <CheckCircle2 size={11} /> SENT · {sentEntry.to}
+          <CheckCircle2 size={11} /> SENT · {done.entry.to}
+        </div>
+      </div>
+    );
+  }
+
+  if (done?.type === 'draft') {
+    return (
+      <div style={{ ...styles.draftCard, borderColor: COLORS.cyanDim }}>
+        <div style={{ ...styles.draftHeader, color: COLORS.cyan }}>
+          <span><CheckCircle2 size={11} /> SAVED TO GMAIL DRAFTS · {done.entry.to}</span>
+          <a
+            href="https://mail.google.com/mail/u/0/#drafts"
+            target="_blank" rel="noreferrer"
+            style={{ ...styles.draftReason, color: COLORS.cyan, textDecoration: 'underline' }}
+          >
+            open drafts ↗
+          </a>
         </div>
       </div>
     );
@@ -959,11 +992,18 @@ function DraftCard({ draft, onUpdate, onSent, onDiscard }) {
 
       <div style={styles.draftActions}>
         <button
+          onClick={saveDraft}
+          disabled={!!working}
+          style={{ ...styles.actionBtn, color: COLORS.bg, background: COLORS.cyan, borderColor: COLORS.cyan }}
+        >
+          <Inbox size={11} /> {working === 'draft' ? 'SAVING…' : 'SAVE DRAFT'}
+        </button>
+        <button
           onClick={send}
-          disabled={sending}
+          disabled={!!working}
           style={{ ...styles.actionBtn, color: COLORS.bg, background: COLORS.green, borderColor: COLORS.green }}
         >
-          <Send size={11} /> {sending ? 'SENDING…' : 'SEND'}
+          <Send size={11} /> {working === 'send' ? 'SENDING…' : 'SEND NOW'}
         </button>
         <button
           onClick={() => setEditing((e) => !e)}

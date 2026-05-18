@@ -21,7 +21,7 @@ import { loadStore, clearTokens, setOverride, setHardBounces } from './store.js'
 import { HARD_RULES, EVENTS, HARD_BOUNCES_DEFAULT } from './sponsors.js';
 import { chat as jarvisChat, isEnabled as jarvisEnabled } from './jarvis.js';
 import { isEnabled as ttsEnabled, streamTTS } from './tts.js';
-import { sendEmail, checkBlocked, getSentLog, ccAddress } from './email.js';
+import { sendEmail, saveDraft, checkBlocked, getSentLog, ccAddress } from './email.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -66,7 +66,7 @@ app.get('/api/auth/status', async (_req, res) => {
   const status = await getStatus();
   const store = await loadStore();
   const scopes = grantedScopeKeys(store.tokens);
-  const canSend = scopes.includes('gmail.send');
+  const canSend = scopes.includes('gmail.compose');
   const missingScopes = REQUIRED_SCOPE_KEYS.filter((s) => !scopes.includes(s));
   res.json({ ...status, configured: true, scopes, canSend, missingScopes, ccAddress: ccAddress() });
 });
@@ -144,7 +144,7 @@ app.post('/api/jarvis/chat', async (req, res) => {
   }
 });
 
-/* ---------- jarvis send (approved draft) ---------- */
+/* ---------- jarvis send (approved draft → out the door) ---------- */
 app.post('/api/jarvis/send', async (req, res) => {
   try {
     const { to, subject, body, threadId } = req.body || {};
@@ -152,6 +152,19 @@ app.post('/api/jarvis/send', async (req, res) => {
     res.json({ ok: true, entry, cc: ccAddress() });
   } catch (err) {
     console.error('Send failed:', err);
+    const status = err.code === 'BLOCKED' ? 403 : 500;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+/* ---------- jarvis save-to-drafts (lands in your Gmail Drafts folder) ---------- */
+app.post('/api/jarvis/draft', async (req, res) => {
+  try {
+    const { to, subject, body, threadId } = req.body || {};
+    const entry = await saveDraft({ to, subject, body, threadId });
+    res.json({ ok: true, entry, cc: ccAddress() });
+  } catch (err) {
+    console.error('Save draft failed:', err);
     const status = err.code === 'BLOCKED' ? 403 : 500;
     res.status(status).json({ error: err.message, code: err.code });
   }
