@@ -6,6 +6,17 @@
 
 import { google } from 'googleapis';
 
+/* Keyword filter for discovery scans. When passed via options.keywords,
+   discovery only matches threads where Gmail's full-text search hits
+   one of these terms. Defaults to sponsorship/partnership signal words
+   so deep sync surfaces real leads instead of every personal/vendor
+   contact. Override via DISCOVERY_KEYWORDS env var (comma-separated). */
+export const DEFAULT_DISCOVERY_KEYWORDS = (
+  process.env.DISCOVERY_KEYWORDS
+    ? process.env.DISCOVERY_KEYWORDS.split(',').map((s) => s.trim()).filter(Boolean)
+    : ['sponsor', 'sponsors', 'sponsorship', 'sponsorships', 'partner', 'partners', 'partnership', 'partnerships']
+);
+
 const NOISE_PREFIXES = [
   'noreply', 'no-reply', 'donotreply', 'do-not-reply',
   'notifications', 'notification', 'mailer-daemon', 'postmaster',
@@ -69,19 +80,25 @@ export function deriveCompanyName(email) {
 }
 
 /* Run discovery across all connected accounts. Returns a map keyed by
-   contact email. options.days controls how far back to look. */
+   contact email. options.days controls the lookback window.
+   options.keywords (array) appends an OR clause so only threads
+   mentioning those keywords match — used by deep sync to surface
+   sponsorship leads while skipping personal/vendor noise. */
 export async function discoverContacts(clients, ourEmails, knownContacts, options = {}) {
   const days = options.days || 1;
   const maxThreadsPerAccount = options.maxThreads || 100;
+  const keywords = options.keywords || null;
   const known = new Set((knownContacts || []).map((c) => (c || '').toLowerCase()));
   const selves = new Set(ourEmails.map((e) => e.toLowerCase()));
+
+  const keywordClause = keywords?.length ? ` (${keywords.join(' OR ')})` : '';
 
   const found = new Map();
 
   for (const { email: accountEmail, client } of clients) {
     try {
       const gmail = google.gmail({ version: 'v1', auth: client });
-      const q = `from:me newer_than:${days}d`;
+      const q = `from:me newer_than:${days}d${keywordClause}`;
       let threads = [];
       let pageToken;
       while (threads.length < maxThreadsPerAccount) {

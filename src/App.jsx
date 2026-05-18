@@ -689,7 +689,7 @@ function AccountsPanel({ authStatus, onAddAccount, onRemove, onSetPrimary, deepS
               ? `Scanning every email across ${dsProgress?.accounts || accounts.length} inbox${(dsProgress?.accounts || accounts.length) === 1 ? '' : 'es'}. This can take ~1 minute.`
               : deepSync?.lastDeepSync
               ? `Last full scan: ${new Date(deepSync.lastDeepSync).toLocaleString()}`
-              : 'Pulls full history (not just recent threads). Run after adding a new inbox.'}
+              : 'Full sponsor history + auto-discovers new leads from threads mentioning sponsorship or partnership.'}
           </div>
         </div>
       )}

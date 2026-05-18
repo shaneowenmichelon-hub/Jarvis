@@ -11,7 +11,7 @@ import { google } from 'googleapis';
 import { getAllAuthorizedClients } from './auth.js';
 import { loadStore, setThreadState, bulkUpsertDiscovered } from './store.js';
 import { SPONSORS, computeFollowUp } from './sponsors.js';
-import { discoverContacts, deriveCompanyName } from './discovery.js';
+import { discoverContacts, deriveCompanyName, DEFAULT_DISCOVERY_KEYWORDS } from './discovery.js';
 
 const MAX_THREADS_PER_SPONSOR = 5;
 const DEEP_MAX_THREADS_PER_SPONSOR = 50;  // upper bound to keep total scan time bounded
@@ -274,9 +274,15 @@ async function runDeepSync() {
 
     const ourEmails = clients.map((c) => c.email.toLowerCase());
 
-    // Deep discovery first: 90-day window, captures contacts the regular
-    // 1-day discovery cycle has never seen.
-    await runDiscovery(clients, ourEmails, { days: 90, maxThreads: 300 });
+    // Deep discovery first: 90-day window, keyword-filtered so only
+    // threads mentioning sponsorship/partnership signal words surface
+    // new contacts (otherwise the 90-day scan would pull in every
+    // personal and vendor address Shane has touched).
+    await runDiscovery(clients, ourEmails, {
+      days: 90,
+      maxThreads: 300,
+      keywords: DEFAULT_DISCOVERY_KEYWORDS,
+    });
     lastDiscoveryAt = Date.now();
 
     const tracked = await getAllTrackedContacts();
