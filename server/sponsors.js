@@ -16,19 +16,19 @@ export const EVENTS = ['Night School', 'HOMETURF', 'Hells Gala', 'Boot Block Par
 export const SPONSORS = [
   // CLOSED
   { id: 'buddy',        name: 'BUDDY',                stage: 'CLOSED',  tier: 'A', value: 45000, event: 'HOMETURF',         contact: 'jordan@buddy.co',           status: 'SIGNED', notes: 'Contract counter-signed. Activation deck due 6/2.' },
-  { id: 'amaze',        name: 'AMAZE',                stage: 'CLOSED',  tier: 'A', value: 32000, event: 'Night School',     contact: 'mira@amaze.com',            status: 'SIGNED', notes: 'Wire received. Need swag forecast.' },
-  { id: 'nevermissed',  name: 'NeverMissed',          stage: 'CLOSED',  tier: 'B', value: 18000, event: 'Boot Block Party', contact: 'team@nevermissed.app',      status: 'SIGNED', notes: 'On-site activation TBD.' },
+  { id: 'amaze',        name: 'AMAZE',                stage: 'IN_DEAL', tier: 'A', value: 5000,  event: 'Hells Gala',       contact: 'mira@amaze.com',            status: 'PROPOSAL_OUT', notes: 'Estimated $5K. Hells Gala activation. Final number TBD.' },
+  { id: 'nevermissed',  name: 'NeverMissed',          stage: 'PAST',    tier: 'B', value: 0,     event: 'Boot Block Party', contact: 'team@nevermissed.app',      status: 'DROPPED', notes: '$5K refunded. Not ideal partner — do not re-pitch.' },
 
   // IN-DEAL
-  { id: 'polymarket',   name: 'Polymarket',           stage: 'IN_DEAL', tier: 'A', value: 75000, event: 'HOMETURF',         contact: 'partnerships@polymarket.com', status: 'REDLINE',      notes: 'Legal redlining MSA. Comp questions pending.' },
-  { id: 'flybyjing',    name: 'Fly By Jing',          stage: 'IN_DEAL', tier: 'B', value: 22000, event: 'Night School',     contact: 'jing@flybyjing.com',        status: 'PROPOSAL_OUT', notes: 'Sampling activation; awaiting CMO sign-off.' },
+  { id: 'polymarket',   name: 'Polymarket',           stage: 'CLOSED',  tier: 'A', value: 0,     event: 'Night School',     contact: 'partnerships@polymarket.com', status: 'SIGNED',       notes: 'Performance deal: $75 per signup using code NIGHTSCHOOL that deposits $20+. Live across Night School tour + NYC/NOLA shows.' },
+  { id: 'flybyjing',    name: 'Fly By Jing',          stage: 'PAST',    tier: 'B', value: 0,     event: 'Night School',     contact: 'jing@flybyjing.com',        status: 'DROPPED',      notes: 'Canceled — no available budget.' },
   { id: 'canes',        name: "Raising Cane's",       stage: 'IN_DEAL', tier: 'A', value: 60000, event: 'HOMETURF',         contact: 'sponsor@raisingcanes.com',  status: 'WAITING',      notes: 'Regional approvals — ping Friday.' },
   { id: 'bodyarmor',    name: 'BODYARMOR',            stage: 'IN_DEAL', tier: 'A', value: 55000, event: 'Hells Gala',       contact: 'sports@bodyarmor.com',      status: 'STALE',        notes: 'Stalled. Push or drop next week.' },
   { id: 'prizepicks',   name: 'PrizePicks',           stage: 'IN_DEAL', tier: 'A', value: 80000, event: 'HOMETURF',         contact: 'brand@prizepicks.com',      status: 'PROPOSAL_OUT', notes: 'Awaiting media plan revision.' },
   { id: 'bloom',        name: 'Bloom Energy',         stage: 'IN_DEAL', tier: 'B', value: 28000, event: 'Boot Block Party', contact: 'partner@bloomenergy.com',   status: 'WAITING',      notes: 'Internal budget cycle ends 5/22.' },
 
   // ENGAGED
-  { id: 'liquid-death', name: 'Liquid Death',         stage: 'ENGAGED', tier: 'A', value: 0,     event: 'HOMETURF',         contact: 'partnerships@liquiddeath.com', status: 'INTRO', notes: 'First call booked 5/24.' },
+  { id: 'liquid-death', name: 'Liquid Death',         stage: 'IN_DEAL', tier: 'A', value: 1500,  event: 'Night School',     contact: 'partnerships@liquiddeath.com', status: 'PROPOSAL_OUT', notes: '5 Night School stops × $300/stop.' },
   { id: 'olipop',       name: 'Olipop',               stage: 'ENGAGED', tier: 'B', value: 0,     event: 'Night School',     contact: 'brand@drinkolipop.com',     status: 'INTRO',  notes: 'Sent deck v2.' },
   { id: 'celsius',      name: 'Celsius',              stage: 'ENGAGED', tier: 'A', value: 0,     event: 'HOMETURF',         contact: 'campus@celsius.com',        status: 'STALE',  notes: 'No response since 5/8. Re-engage.' },
 

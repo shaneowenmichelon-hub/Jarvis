@@ -58,6 +58,7 @@ const STATUS_META = {
   COLD:           { color: COLORS.textDim },
   WARM:           { color: COLORS.yellow },
   DO_NOT_CONTACT: { color: COLORS.red },
+  DROPPED:        { color: COLORS.textDim },
 };
 
 const RULE_ICONS = { cc: Mail, block: Shield, intro: Users };
