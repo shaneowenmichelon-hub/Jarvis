@@ -752,13 +752,29 @@ function FollowUpPanel({ overdue, dueSoon, onSelect, onMark }) {
                   }}>
                     {isOverdue ? `${Math.abs(dayDelta)}D LATE` : dayDelta === 0 ? 'TODAY' : `${dayDelta}D`}
                   </div>
-                  <button
-                    style={styles.followBtn}
-                    onClick={(e) => { e.stopPropagation(); onMark(s.id); }}
-                    title="Mark followed up"
-                  >
-                    <Send size={11} />
-                  </button>
+                  {(() => {
+                    const url = gmailThreadUrl(s);
+                    return url ? (
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{ ...styles.followBtn, textDecoration: 'none' }}
+                        title="Open thread in Gmail"
+                      >
+                        <Send size={11} />
+                      </a>
+                    ) : (
+                      <button
+                        disabled
+                        style={{ ...styles.followBtn, opacity: 0.3, cursor: 'not-allowed' }}
+                        title="No thread yet — sync first"
+                      >
+                        <Send size={11} />
+                      </button>
+                    );
+                  })()}
                 </div>
               </div>
             );
@@ -999,15 +1015,18 @@ function DetailPanel({ sponsor, onMark, now }) {
         >
           <Send size={11} /> MARK FOLLOWED UP
         </button>
-        {sponsor.threadIds?.[0] && (
-          <a
-            href={`https://mail.google.com/mail/u/0/#inbox/${sponsor.threadIds[0]}`}
-            target="_blank" rel="noreferrer"
-            style={{ ...styles.actionBtn, color: COLORS.green, borderColor: COLORS.greenDim, textDecoration: 'none' }}
-          >
-            <ArrowUpRight size={11} /> OPEN THREAD
-          </a>
-        )}
+        {(() => {
+          const url = gmailThreadUrl(sponsor);
+          return url ? (
+            <a
+              href={url}
+              target="_blank" rel="noreferrer"
+              style={{ ...styles.actionBtn, color: COLORS.green, borderColor: COLORS.greenDim, textDecoration: 'none' }}
+            >
+              <ArrowUpRight size={11} /> OPEN THREAD
+            </a>
+          ) : null;
+        })()}
         <button style={{ ...styles.actionBtn, color: COLORS.orange, borderColor: COLORS.orangeDim }}>
           <Calendar size={11} /> SCHEDULE
         </button>
@@ -1648,6 +1667,25 @@ function relativeTime(iso, now = new Date()) {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}M AGO`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}H AGO`;
   return `${Math.floor(seconds / 86400)}D AGO`;
+}
+
+/* Build the best Gmail URL for a sponsor's most recent thread.
+   With `authuser=<email>` Gmail routes to the right inbox even when
+   multiple accounts are signed into the browser at once. Falls back to
+   a "search by contact" URL if no thread has been synced yet. */
+function gmailThreadUrl(sponsor) {
+  const first = sponsor.threads?.[0];
+  if (first?.threadId) {
+    if (first.account) {
+      return `https://mail.google.com/mail/?authuser=${encodeURIComponent(first.account)}#inbox/${first.threadId}`;
+    }
+    return `https://mail.google.com/mail/u/0/#inbox/${first.threadId}`;
+  }
+  if (sponsor.contact) {
+    const q = encodeURIComponent(`from:${sponsor.contact} OR to:${sponsor.contact}`);
+    return `https://mail.google.com/mail/u/0/#search/${q}`;
+  }
+  return null;
 }
 
 /* ============================================================
