@@ -1,0 +1,26 @@
+# Render.com deployment manifest.
+# After clicking "Deploy to Render", fill in the env vars listed below
+# in the Render dashboard (they're marked sync: false so secrets aren't
+# baked into the repo).
+
+services:
+  - type: web
+    name: zmm-sponsor-command
+    runtime: node
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SYNC_MIN_INTERVAL
+        value: "30"
