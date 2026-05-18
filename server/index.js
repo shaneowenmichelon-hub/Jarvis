@@ -14,6 +14,7 @@ import { getStatus, syncAllSponsors, getEnrichedSponsors } from './gmail.js';
 import { loadStore, clearTokens, setOverride, setHardBounces } from './store.js';
 import { HARD_RULES, EVENTS, HARD_BOUNCES_DEFAULT } from './sponsors.js';
 import { chat as jarvisChat, isEnabled as jarvisEnabled } from './jarvis.js';
+import { isEnabled as ttsEnabled, streamTTS } from './tts.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -29,6 +30,7 @@ app.get('/api/health', (_req, res) => {
     ok: true,
     oauth_configured: oauthConfigured(),
     jarvis_enabled: jarvisEnabled(),
+    tts_premium: ttsEnabled(),
   });
 });
 
@@ -128,6 +130,16 @@ app.post('/api/jarvis/chat', async (req, res) => {
   } catch (err) {
     console.error('JARVIS chat failed:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/* ---------- jarvis voice (ElevenLabs) ---------- */
+app.post('/api/jarvis/speak', async (req, res) => {
+  try {
+    await streamTTS(req.body?.text, res);
+  } catch (err) {
+    console.error('TTS failed:', err);
+    if (!res.headersSent) res.status(500).json({ error: err.message });
   }
 });
 

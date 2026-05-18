@@ -731,51 +731,106 @@ function DetailStat({ label, value, color }) {
 
 /* ============================================================
    SPEECH HOOKS
-   Browser-native: SpeechSynthesis for output, SpeechRecognition
-   for input. No API keys, no cost. Works in Chrome, Edge, Safari.
+   Output: prefers ElevenLabs (human-sounding British TTS via the
+   /api/jarvis/speak proxy) and falls back to browser SpeechSynthesis
+   if the server doesn't have an ElevenLabs key configured.
+   Input:  browser-native SpeechRecognition. No API keys.
    ============================================================ */
 
-/* Pick the best British male voice available on this device.
-   Falls back through preferences if the ideal isn't installed. */
-function useBritishVoice() {
-  const [voice, setVoice] = useState(null);
+function useJarvisVoice() {
+  const [premium, setPremium] = useState(false);
+  const [browserVoice, setBrowserVoice] = useState(null);
+  const [speaking, setSpeaking] = useState(false);
+  const audioRef = useRef(null);
 
+  // Probe the server: is ElevenLabs available?
+  useEffect(() => {
+    api.health()
+      .then((h) => setPremium(!!h.tts_premium))
+      .catch(() => setPremium(false));
+  }, []);
+
+  // Pick best browser voice as the fallback
   useEffect(() => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     const pick = () => {
       const voices = window.speechSynthesis.getVoices();
       if (!voices.length) return;
-      const tryFind = (pred) => voices.find(pred);
-      // Strongest match: known British male voice names
       const v =
-        tryFind((v) => v.lang === 'en-GB' && /daniel|george|oliver|arthur|jamie|jarvis/i.test(v.name)) ||
-        tryFind((v) => v.lang === 'en-GB' && /male/i.test(v.name)) ||
-        tryFind((v) => v.lang === 'en-GB') ||
-        tryFind((v) => /en[-_]gb/i.test(v.lang)) ||
-        tryFind((v) => v.lang?.startsWith('en'));
-      setVoice(v || null);
+        voices.find((v) => v.lang === 'en-GB' && /daniel|george|oliver|arthur|jamie/i.test(v.name)) ||
+        voices.find((v) => v.lang === 'en-GB' && /male/i.test(v.name)) ||
+        voices.find((v) => v.lang === 'en-GB') ||
+        voices.find((v) => /en[-_]gb/i.test(v.lang)) ||
+        voices.find((v) => v.lang?.startsWith('en'));
+      setBrowserVoice(v || null);
     };
     pick();
     window.speechSynthesis.onvoiceschanged = pick;
     return () => { window.speechSynthesis.onvoiceschanged = null; };
   }, []);
 
-  const speak = useCallback((text) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis || !text) return;
+  const speakBrowser = useCallback((text) => {
+    if (!window.speechSynthesis) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    if (voice) u.voice = voice;
+    if (browserVoice) u.voice = browserVoice;
     u.rate = 0.96;
     u.pitch = 0.92;
-    u.volume = 1;
+    u.onend = () => setSpeaking(false);
+    setSpeaking(true);
     window.speechSynthesis.speak(u);
-  }, [voice]);
+  }, [browserVoice]);
 
-  const cancel = useCallback(() => {
-    window.speechSynthesis?.cancel();
+  const speakPremium = useCallback(async (text) => {
+    const res = await fetch('/api/jarvis/speak', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) throw new Error(`tts ${res.status}`);
+    const blob = await res.blob();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      try { URL.revokeObjectURL(audioRef.current.src); } catch { /* noop */ }
+    }
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    audio.addEventListener('ended', () => {
+      URL.revokeObjectURL(url);
+      setSpeaking(false);
+    }, { once: true });
+    audioRef.current = audio;
+    setSpeaking(true);
+    await audio.play();
   }, []);
 
-  return { voice, speak, cancel, available: typeof window !== 'undefined' && !!window.speechSynthesis };
+  const speak = useCallback(async (text) => {
+    if (!text) return;
+    if (premium) {
+      try {
+        await speakPremium(text);
+        return;
+      } catch (err) {
+        console.warn('premium voice failed, falling back to browser', err);
+        setPremium(false); // degrade for the rest of the session
+      }
+    }
+    speakBrowser(text);
+  }, [premium, speakPremium, speakBrowser]);
+
+  const cancel = useCallback(() => {
+    audioRef.current?.pause();
+    window.speechSynthesis?.cancel();
+    setSpeaking(false);
+  }, []);
+
+  const label = premium
+    ? 'ElevenLabs · British'
+    : browserVoice
+    ? browserVoice.name
+    : 'browser TTS';
+
+  return { speak, cancel, label, premium, speaking };
 }
 
 /* Speech-to-text. Triggers onResult with the recognized transcript
@@ -838,7 +893,7 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
   const [hasInteracted, setHasInteracted] = useState(false);
   const scrollRef = useRef(null);
 
-  const { voice, speak, cancel } = useBritishVoice();
+  const { speak, cancel, label: voiceLabel, premium: voicePremium } = useJarvisVoice();
 
   // Seed greeting once we have stats
   useEffect(() => {
@@ -901,11 +956,11 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
   };
 
   const liveHint = !hasInteracted && voiceOn
-    ? 'Voice on. Tap mic to talk, or type.'
+    ? `Voice: ${voiceLabel}${voicePremium ? '' : ' (basic — set ELEVENLABS_API_KEY for human voice)'}`
     : model === 'simulated'
     ? 'Simulated mode. Set ANTHROPIC_API_KEY to enable live JARVIS.'
     : model
-    ? `Live · ${model}${voice ? ` · ${voice.name}` : ''}`
+    ? `Live · ${model} · ${voiceLabel}`
     : 'Ready.';
 
   return (
