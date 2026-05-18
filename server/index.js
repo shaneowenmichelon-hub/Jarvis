@@ -1,0 +1,147 @@
+/* ZMM // SPONSOR COMMAND — backend
+   Express server: OAuth, Gmail sync, sponsor API, JARVIS chat.
+   In production, also serves the Vite-built SPA. */
+
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+
+import { isConfigured as oauthConfigured, getAuthUrl, exchangeCode } from './auth.js';
+import { getStatus, syncAllSponsors, getEnrichedSponsors } from './gmail.js';
+import { loadStore, clearTokens, setOverride, setHardBounces } from './store.js';
+import { HARD_RULES, EVENTS, HARD_BOUNCES_DEFAULT } from './sponsors.js';
+import { chat as jarvisChat, isEnabled as jarvisEnabled } from './jarvis.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.PORT) || 3001;
+const PROD = process.env.NODE_ENV === 'production';
+
+const app = express();
+app.use(cors());
+app.use(express.json({ limit: '1mb' }));
+
+/* ---------- health ---------- */
+app.get('/api/health', (_req, res) => {
+  res.json({
+    ok: true,
+    oauth_configured: oauthConfigured(),
+    jarvis_enabled: jarvisEnabled(),
+  });
+});
+
+/* ---------- meta ---------- */
+app.get('/api/meta', async (_req, res) => {
+  const store = await loadStore();
+  res.json({
+    hardRules: HARD_RULES,
+    events: EVENTS,
+    hardBounces: store.hardBounces ?? HARD_BOUNCES_DEFAULT,
+  });
+});
+
+app.post('/api/meta/hard-bounces', async (req, res) => {
+  const n = Number(req.body?.value);
+  if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'invalid value' });
+  await setHardBounces(n);
+  res.json({ ok: true, value: n });
+});
+
+/* ---------- auth ---------- */
+app.get('/api/auth/status', async (_req, res) => {
+  if (!oauthConfigured()) {
+    return res.json({ connected: false, configured: false, hint: 'Set GOOGLE_CLIENT_ID/SECRET in .env' });
+  }
+  const status = await getStatus();
+  res.json({ ...status, configured: true });
+});
+
+app.get('/auth/google', (_req, res) => {
+  if (!oauthConfigured()) return res.status(500).send('Google OAuth not configured.');
+  res.redirect(getAuthUrl());
+});
+
+app.get('/auth/google/callback', async (req, res) => {
+  const code = req.query.code;
+  if (!code) return res.status(400).send('Missing code.');
+  try {
+    await exchangeCode(String(code));
+    // Kick off an immediate sync so the dashboard has live data on first load.
+    syncAllSponsors({ force: true }).catch((e) => console.error('initial sync failed:', e.message));
+    // Bounce the user back to the SPA.
+    const target = PROD ? '/' : 'http://localhost:5173/';
+    res.redirect(target + '?connected=1');
+  } catch (err) {
+    console.error('OAuth exchange failed:', err);
+    res.status(500).send('OAuth exchange failed: ' + err.message);
+  }
+});
+
+app.post('/api/auth/logout', async (_req, res) => {
+  await clearTokens();
+  res.json({ ok: true });
+});
+
+/* ---------- sponsors ---------- */
+app.get('/api/sponsors', async (req, res) => {
+  const force = req.query.sync === '1';
+  try {
+    if (force) await syncAllSponsors({ force: true });
+    else syncAllSponsors().catch((e) => console.error('background sync failed:', e.message));
+    const sponsors = await getEnrichedSponsors();
+    const status = await getStatus();
+    res.json({ sponsors, lastSync: status.lastSync, connected: status.connected });
+  } catch (err) {
+    console.error('GET /api/sponsors failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/sponsors/:id', async (req, res) => {
+  const { id } = req.params;
+  const allowed = ['stage', 'value', 'notes', 'status', 'tier', 'event'];
+  const patch = {};
+  for (const k of allowed) if (k in req.body) patch[k] = req.body[k];
+  await setOverride(id, patch);
+  const sponsors = await getEnrichedSponsors();
+  res.json({ ok: true, sponsor: sponsors.find((s) => s.id === id) });
+});
+
+app.post('/api/sponsors/:id/followup', async (req, res) => {
+  /* Mark a sponsor as just-followed-up. This sets a local override so
+     the follow-up due date pushes forward immediately; the real outbound
+     timestamp will be confirmed on the next Gmail sync. */
+  const { id } = req.params;
+  const now = new Date().toISOString();
+  await setOverride(id, { _manualLastOutbound: now });
+  res.json({ ok: true });
+});
+
+/* ---------- jarvis chat ---------- */
+app.post('/api/jarvis/chat', async (req, res) => {
+  const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
+  try {
+    const text = await jarvisChat(messages);
+    res.json({ text, model: jarvisEnabled() ? 'claude-sonnet-4-5' : 'simulated' });
+  } catch (err) {
+    console.error('JARVIS chat failed:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ---------- production: serve built SPA ---------- */
+const distPath = resolve(__dirname, '..', 'dist');
+if (PROD && existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (_req, res) => res.sendFile(resolve(distPath, 'index.html')));
+}
+
+app.listen(PORT, () => {
+  const mode = PROD ? 'production' : 'development';
+  console.log(`\n  ZMM // SPONSOR COMMAND backend [${mode}]`);
+  console.log(`  Listening on http://localhost:${PORT}`);
+  console.log(`  OAuth configured: ${oauthConfigured() ? 'yes' : 'no — set GOOGLE_CLIENT_ID/SECRET in .env'}`);
+  console.log(`  JARVIS live mode: ${jarvisEnabled() ? 'yes' : 'no — set ANTHROPIC_API_KEY in .env'}\n`);
+});

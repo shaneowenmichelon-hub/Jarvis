@@ -1,28 +1,29 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Activity, Mail, Send, Clock, AlertTriangle, CheckCircle2, XCircle,
-  Zap, Radio, Target, Cpu, TrendingUp, Users, Shield, Search,
-  ChevronRight, Plus, Filter, Calendar, Inbox, MailX, Flame,
+  Target, Cpu, TrendingUp, Users, Shield, Search,
+  ChevronRight, Calendar, Inbox, MailX, Flame,
   Power, Wifi, Lock, Eye, MessageSquare, ArrowUpRight, Sparkles,
+  RefreshCw, LogOut, Link2, AlertCircle,
 } from 'lucide-react';
+import { api } from './api.js';
 
 /* ============================================================
    ZMM // SPONSOR COMMAND
    Jarvis-style sponsorship outreach tracking dashboard.
-   Shane Michelon — President, ZMM Events
+   Shane Michelon — President, ZMM Events.
+   Data source: Express backend wired to Gmail via OAuth.
    ============================================================ */
 
 const COLORS = {
   bg: '#040813',
   bgPanel: 'rgba(8, 18, 36, 0.85)',
-  bgPanelSolid: '#081224',
   cyan: '#5be0ff',
   cyanDim: 'rgba(91, 224, 255, 0.35)',
   cyanFaint: 'rgba(91, 224, 255, 0.12)',
   cyanGlow: 'rgba(91, 224, 255, 0.55)',
   orange: '#ff9a3c',
   orangeDim: 'rgba(255, 154, 60, 0.35)',
-  orangeFaint: 'rgba(255, 154, 60, 0.12)',
   red: '#ff4d6d',
   redDim: 'rgba(255, 77, 109, 0.35)',
   green: '#4eff9f',
@@ -36,266 +37,154 @@ const COLORS = {
 const FONT_DISPLAY = "'Orbitron', sans-serif";
 const FONT_MONO = "'JetBrains Mono', monospace";
 
-/* ---------- HARD RULES (mirror README) ---------- */
-const HARD_RULES = [
-  { id: 'cc', text: 'CC zach@zmmevents.com on all outbound', icon: Mail },
-  { id: 'block', text: 'NEVER contact Constellation Brands', icon: Shield },
-  { id: 'intro', text: 'Standard intro: Shane Michelon, ZMM Events / NightSchool', icon: Users },
-];
-
-const EVENTS = ['Night School', 'HOMETURF', 'Hells Gala', 'Boot Block Party'];
-
-/* ---------- PIPELINE SEED DATA ----------
-   This is the source of truth for the dashboard until a real DB is wired up.
-   Each sponsor includes the email thread state JARVIS needs to surface. */
-const today = new Date('2026-05-18');
-const daysAgo = (n) => {
-  const d = new Date(today);
-  d.setDate(d.getDate() - n);
-  return d.toISOString();
-};
-const daysAhead = (n) => {
-  const d = new Date(today);
-  d.setDate(d.getDate() + n);
-  return d.toISOString();
-};
-
-const PIPELINE = [
-  // CLOSED
-  {
-    id: 'buddy', name: 'BUDDY', stage: 'CLOSED', tier: 'A',
-    value: 45000, event: 'HOMETURF', contact: 'jordan@buddy.co',
-    lastOutbound: daysAgo(2), lastInbound: daysAgo(1), followUpDue: null,
-    threadCount: 14, status: 'SIGNED', notes: 'Contract counter-signed. Activation deck due 6/2.',
-  },
-  {
-    id: 'amaze', name: 'AMAZE', stage: 'CLOSED', tier: 'A',
-    value: 32000, event: 'Night School', contact: 'mira@amaze.com',
-    lastOutbound: daysAgo(5), lastInbound: daysAgo(3), followUpDue: null,
-    threadCount: 22, status: 'SIGNED', notes: 'Wire received. Need swag forecast.',
-  },
-  {
-    id: 'nevermissed', name: 'NeverMissed', stage: 'CLOSED', tier: 'B',
-    value: 18000, event: 'Boot Block Party', contact: 'team@nevermissed.app',
-    lastOutbound: daysAgo(8), lastInbound: daysAgo(6), followUpDue: null,
-    threadCount: 9, status: 'SIGNED', notes: 'On-site activation TBD.',
-  },
-
-  // IN-DEAL (negotiating)
-  {
-    id: 'polymarket', name: 'Polymarket', stage: 'IN_DEAL', tier: 'A',
-    value: 75000, event: 'HOMETURF', contact: 'partnerships@polymarket.com',
-    lastOutbound: daysAgo(1), lastInbound: daysAgo(0), followUpDue: daysAhead(3),
-    threadCount: 18, status: 'REDLINE', notes: 'Legal redlining MSA. Comp questions pending.',
-  },
-  {
-    id: 'flybyjing', name: 'Fly By Jing', stage: 'IN_DEAL', tier: 'B',
-    value: 22000, event: 'Night School', contact: 'jing@flybyjing.com',
-    lastOutbound: daysAgo(4), lastInbound: daysAgo(2), followUpDue: daysAhead(2),
-    threadCount: 11, status: 'PROPOSAL_OUT', notes: 'Sampling activation; awaiting CMO sign-off.',
-  },
-  {
-    id: 'canes', name: "Raising Cane's", stage: 'IN_DEAL', tier: 'A',
-    value: 60000, event: 'HOMETURF', contact: 'sponsor@raisingcanes.com',
-    lastOutbound: daysAgo(6), lastInbound: daysAgo(4), followUpDue: daysAhead(0),
-    threadCount: 16, status: 'WAITING', notes: 'Regional approvals — ping Friday.',
-  },
-  {
-    id: 'bodyarmor', name: 'BODYARMOR', stage: 'IN_DEAL', tier: 'A',
-    value: 55000, event: 'Hells Gala', contact: 'sports@bodyarmor.com',
-    lastOutbound: daysAgo(9), lastInbound: daysAgo(7), followUpDue: daysAhead(-2),
-    threadCount: 8, status: 'STALE', notes: 'Stalled. Push or drop next week.',
-  },
-  {
-    id: 'prizepicks', name: 'PrizePicks', stage: 'IN_DEAL', tier: 'A',
-    value: 80000, event: 'HOMETURF', contact: 'brand@prizepicks.com',
-    lastOutbound: daysAgo(3), lastInbound: daysAgo(1), followUpDue: daysAhead(4),
-    threadCount: 13, status: 'PROPOSAL_OUT', notes: 'Awaiting media plan revision.',
-  },
-  {
-    id: 'bloom', name: 'Bloom Energy', stage: 'IN_DEAL', tier: 'B',
-    value: 28000, event: 'Boot Block Party', contact: 'partner@bloomenergy.com',
-    lastOutbound: daysAgo(7), lastInbound: daysAgo(5), followUpDue: daysAhead(1),
-    threadCount: 6, status: 'WAITING', notes: 'Internal budget cycle ends 5/22.',
-  },
-
-  // ENGAGED (responded, early)
-  {
-    id: 'liquid-death', name: 'Liquid Death', stage: 'ENGAGED', tier: 'A',
-    value: 0, event: 'HOMETURF', contact: 'partnerships@liquiddeath.com',
-    lastOutbound: daysAgo(2), lastInbound: daysAgo(1), followUpDue: daysAhead(5),
-    threadCount: 4, status: 'INTRO', notes: 'First call booked 5/24.',
-  },
-  {
-    id: 'olipop', name: 'Olipop', stage: 'ENGAGED', tier: 'B',
-    value: 0, event: 'Night School', contact: 'brand@drinkolipop.com',
-    lastOutbound: daysAgo(5), lastInbound: daysAgo(4), followUpDue: daysAhead(2),
-    threadCount: 3, status: 'INTRO', notes: 'Sent deck v2.',
-  },
-  {
-    id: 'celsius', name: 'Celsius', stage: 'ENGAGED', tier: 'A',
-    value: 0, event: 'HOMETURF', contact: 'campus@celsius.com',
-    lastOutbound: daysAgo(11), lastInbound: daysAgo(10), followUpDue: daysAhead(-3),
-    threadCount: 2, status: 'STALE', notes: 'No response since 5/8. Re-engage.',
-  },
-
-  // COLD (outbound only)
-  {
-    id: 'redbull', name: 'Red Bull', stage: 'COLD', tier: 'A',
-    value: 0, event: 'HOMETURF', contact: 'collegiate@redbull.com',
-    lastOutbound: daysAgo(6), lastInbound: null, followUpDue: daysAhead(1),
-    threadCount: 1, status: 'COLD', notes: 'No reply on first touch.',
-  },
-  {
-    id: 'monster', name: 'Monster Energy', stage: 'COLD', tier: 'A',
-    value: 0, event: 'Hells Gala', contact: 'sports@monsterenergy.com',
-    lastOutbound: daysAgo(10), lastInbound: null, followUpDue: daysAhead(-3),
-    threadCount: 1, status: 'COLD', notes: '2nd touch overdue.',
-  },
-  {
-    id: 'gatorade', name: 'Gatorade', stage: 'COLD', tier: 'A',
-    value: 0, event: 'HOMETURF', contact: 'partnerships@gatorade.com',
-    lastOutbound: daysAgo(3), lastInbound: null, followUpDue: daysAhead(4),
-    threadCount: 1, status: 'COLD', notes: '',
-  },
-  {
-    id: 'chipotle', name: 'Chipotle', stage: 'COLD', tier: 'B',
-    value: 0, event: 'Night School', contact: 'sponsorships@chipotle.com',
-    lastOutbound: daysAgo(14), lastInbound: null, followUpDue: daysAhead(-7),
-    threadCount: 1, status: 'COLD', notes: 'Long overdue. Drop or retry from new domain.',
-  },
-
-  // PAST PARTNERS
-  {
-    id: 'rhoback', name: 'Rhoback', stage: 'PAST', tier: 'B',
-    value: 0, event: 'HOMETURF', contact: 'collegiate@rhoback.com',
-    lastOutbound: daysAgo(45), lastInbound: daysAgo(44), followUpDue: daysAhead(7),
-    threadCount: 30, status: 'WARM', notes: 'Renewal pitch for fall.',
-  },
-  {
-    id: 'shopify', name: 'Shopify', stage: 'PAST', tier: 'A',
-    value: 0, event: 'Night School', contact: 'campus@shopify.com',
-    lastOutbound: daysAgo(60), lastInbound: daysAgo(58), followUpDue: daysAhead(14),
-    threadCount: 41, status: 'WARM', notes: 'Schedule renewal call.',
-  },
-
-  // BLOCKED
-  {
-    id: 'constellation', name: 'Constellation Brands', stage: 'BLOCKED', tier: '—',
-    value: 0, event: '—', contact: 'blocked',
-    lastOutbound: null, lastInbound: null, followUpDue: null,
-    threadCount: 0, status: 'DO_NOT_CONTACT', notes: 'Hard block. Legal directive.',
-  },
-];
-
-const HARD_BOUNCES = 69;
+const POLL_INTERVAL_MS = 60_000;
 
 const STAGE_META = {
-  CLOSED:  { label: 'CLOSED',   color: COLORS.green,  bg: 'rgba(78, 255, 159, 0.10)' },
-  IN_DEAL: { label: 'IN-DEAL',  color: COLORS.orange, bg: 'rgba(255, 154, 60, 0.10)' },
-  ENGAGED: { label: 'ENGAGED',  color: COLORS.cyan,   bg: 'rgba(91, 224, 255, 0.10)' },
+  CLOSED:  { label: 'CLOSED',   color: COLORS.green,   bg: 'rgba(78, 255, 159, 0.10)' },
+  IN_DEAL: { label: 'IN-DEAL',  color: COLORS.orange,  bg: 'rgba(255, 154, 60, 0.10)' },
+  ENGAGED: { label: 'ENGAGED',  color: COLORS.cyan,    bg: 'rgba(91, 224, 255, 0.10)' },
   COLD:    { label: 'COLD',     color: COLORS.textDim, bg: 'rgba(120, 149, 184, 0.08)' },
-  PAST:    { label: 'PAST',     color: COLORS.yellow, bg: 'rgba(255, 216, 107, 0.10)' },
-  BLOCKED: { label: 'BLOCKED',  color: COLORS.red,    bg: 'rgba(255, 77, 109, 0.10)' },
+  PAST:    { label: 'PAST',     color: COLORS.yellow,  bg: 'rgba(255, 216, 107, 0.10)' },
+  BLOCKED: { label: 'BLOCKED',  color: COLORS.red,     bg: 'rgba(255, 77, 109, 0.10)' },
 };
 
 const STATUS_META = {
-  SIGNED:        { color: COLORS.green },
-  REDLINE:       { color: COLORS.orange },
-  PROPOSAL_OUT:  { color: COLORS.cyan },
-  WAITING:       { color: COLORS.yellow },
-  STALE:         { color: COLORS.red },
-  INTRO:         { color: COLORS.cyan },
-  COLD:          { color: COLORS.textDim },
-  WARM:          { color: COLORS.yellow },
-  DO_NOT_CONTACT:{ color: COLORS.red },
+  SIGNED:         { color: COLORS.green },
+  REDLINE:        { color: COLORS.orange },
+  PROPOSAL_OUT:   { color: COLORS.cyan },
+  WAITING:        { color: COLORS.yellow },
+  STALE:          { color: COLORS.red },
+  INTRO:          { color: COLORS.cyan },
+  COLD:           { color: COLORS.textDim },
+  WARM:           { color: COLORS.yellow },
+  DO_NOT_CONTACT: { color: COLORS.red },
 };
+
+const RULE_ICONS = { cc: Mail, block: Shield, intro: Users };
 
 /* ============================================================
    APP
    ============================================================ */
 export default function App() {
-  const [pipeline, setPipeline] = useState(PIPELINE);
   const [now, setNow] = useState(new Date());
+  const [authStatus, setAuthStatus] = useState({ connected: false, configured: false, user: null, lastSync: null });
+  const [meta, setMeta] = useState({ hardRules: [], events: [], hardBounces: 0 });
+  const [sponsors, setSponsors] = useState([]);
   const [activeStage, setActiveStage] = useState('ALL');
   const [search, setSearch] = useState('');
-  const [selectedId, setSelectedId] = useState('polymarket');
+  const [selectedId, setSelectedId] = useState(null);
   const [chatOpen, setChatOpen] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState(null);
+  const [lastSync, setLastSync] = useState(null);
 
-  // Live clock — pure aesthetic, but it sells the Jarvis feel.
+  /* live clock — pure aesthetic */
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
 
-  const stats = useMemo(() => {
-    const closed = pipeline.filter((s) => s.stage === 'CLOSED');
-    const inDeal = pipeline.filter((s) => s.stage === 'IN_DEAL');
-    const engaged = pipeline.filter((s) => s.stage === 'ENGAGED');
-    const cold = pipeline.filter((s) => s.stage === 'COLD');
-    const closedValue = closed.reduce((a, s) => a + s.value, 0);
-    const pipelineValue = inDeal.reduce((a, s) => a + s.value, 0);
-    const overdue = pipeline.filter(
-      (s) => s.followUpDue && new Date(s.followUpDue) < today && s.stage !== 'CLOSED' && s.stage !== 'BLOCKED'
-    );
-    const dueSoon = pipeline.filter((s) => {
-      if (!s.followUpDue) return false;
-      const due = new Date(s.followUpDue);
-      const days = (due - today) / (1000 * 60 * 60 * 24);
-      return days >= 0 && days <= 3 && s.stage !== 'CLOSED';
-    });
-    return {
-      closed: closed.length,
-      inDeal: inDeal.length,
-      engaged: engaged.length,
-      cold: cold.length,
-      closedValue,
-      pipelineValue,
-      overdue,
-      dueSoon,
-      total: pipeline.length,
-    };
-  }, [pipeline]);
+  /* initial load */
+  const loadAll = useCallback(async ({ forceSync = false } = {}) => {
+    try {
+      if (forceSync) setSyncing(true);
+      const [auth, metaRes, sponsorRes] = await Promise.all([
+        api.authStatus(),
+        api.meta(),
+        api.sponsors({ sync: forceSync }),
+      ]);
+      setAuthStatus(auth);
+      setMeta(metaRes);
+      setSponsors(sponsorRes.sponsors);
+      setLastSync(sponsorRes.lastSync);
+      setError(null);
+      if (!selectedId && sponsorRes.sponsors.length) {
+        const inDeal = sponsorRes.sponsors.find((s) => s.stage === 'IN_DEAL');
+        setSelectedId(inDeal?.id || sponsorRes.sponsors[0].id);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setSyncing(false);
+    }
+  }, [selectedId]);
 
+  useEffect(() => {
+    loadAll();
+    const t = setInterval(() => loadAll(), POLL_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [loadAll]);
+
+  /* handle OAuth redirect (?connected=1 after callback) */
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    if (u.searchParams.get('connected') === '1') {
+      u.searchParams.delete('connected');
+      window.history.replaceState({}, '', u.toString());
+      loadAll({ forceSync: true });
+    }
+  }, [loadAll]);
+
+  const stats = useMemo(() => computeStats(sponsors, now), [sponsors, now]);
   const filtered = useMemo(() => {
-    return pipeline.filter((s) => {
+    return sponsors.filter((s) => {
       if (activeStage !== 'ALL' && s.stage !== activeStage) return false;
       if (search && !s.name.toLowerCase().includes(search.toLowerCase())) return false;
       return true;
     });
-  }, [pipeline, activeStage, search]);
+  }, [sponsors, activeStage, search]);
+  const selected = sponsors.find((s) => s.id === selectedId) || sponsors[0];
 
-  const selected = pipeline.find((s) => s.id === selectedId) || pipeline[0];
+  const markFollowedUp = async (id) => {
+    try {
+      await api.markFollowup(id);
+      await loadAll({ forceSync: true });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
 
-  const markFollowedUp = (id) => {
-    setPipeline((prev) =>
-      prev.map((s) =>
-        s.id === id
-          ? { ...s, lastOutbound: new Date().toISOString(), followUpDue: daysAhead(5) }
-          : s
-      )
-    );
+  const connectGmail = () => {
+    window.location.href = '/auth/google';
+  };
+
+  const disconnectGmail = async () => {
+    await api.logout();
+    await loadAll();
   };
 
   return (
     <div style={styles.shell}>
       <BackgroundFX />
-      <TopBar now={now} stats={stats} />
+      <TopBar
+        now={now}
+        stats={stats}
+        authStatus={authStatus}
+        lastSync={lastSync}
+        syncing={syncing}
+        onSync={() => loadAll({ forceSync: true })}
+        onConnect={connectGmail}
+        onDisconnect={disconnectGmail}
+      />
+
+      {!authStatus.configured && <SetupBanner />}
+      {authStatus.configured && !authStatus.connected && <ConnectBanner onConnect={connectGmail} />}
+      {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       <div style={styles.mainGrid}>
-        {/* LEFT COLUMN — KPIs + Rules */}
         <div style={styles.col}>
-          <KpiPanel stats={stats} />
+          <KpiPanel stats={stats} loading={loading} />
           <FollowUpPanel
             overdue={stats.overdue}
             dueSoon={stats.dueSoon}
             onSelect={setSelectedId}
             onMark={markFollowedUp}
           />
-          <RulesPanel />
+          <RulesPanel rules={meta.hardRules} />
         </div>
 
-        {/* CENTER COLUMN — Pipeline */}
         <div style={styles.col}>
           <PipelinePanel
             pipeline={filtered}
@@ -305,15 +194,21 @@ export default function App() {
             setSearch={setSearch}
             selectedId={selectedId}
             onSelect={setSelectedId}
-            totalCount={pipeline.length}
+            totalCount={sponsors.length}
+            loading={loading}
+            now={now}
           />
-          <BouncePanel />
+          <BouncePanel value={meta.hardBounces} />
         </div>
 
-        {/* RIGHT COLUMN — Detail + Jarvis */}
         <div style={styles.col}>
-          <DetailPanel sponsor={selected} onMark={markFollowedUp} />
-          <JarvisPanel open={chatOpen} setOpen={setChatOpen} sponsor={selected} stats={stats} />
+          <DetailPanel sponsor={selected} onMark={markFollowedUp} now={now} />
+          <JarvisPanel
+            open={chatOpen}
+            setOpen={setChatOpen}
+            sponsor={selected}
+            stats={stats}
+          />
         </div>
       </div>
 
@@ -323,7 +218,46 @@ export default function App() {
 }
 
 /* ============================================================
-   BACKGROUND FX — subtle HUD shimmer
+   BANNERS
+   ============================================================ */
+function SetupBanner() {
+  return (
+    <div style={{ ...styles.banner, borderColor: COLORS.yellow + '55', color: COLORS.yellow }}>
+      <AlertCircle size={14} />
+      <div>
+        <strong>SETUP REQUIRED:</strong> Add Google OAuth credentials to <code>.env</code> to
+        enable live Gmail sync. See <code>.env.example</code>. Dashboard is showing seed data.
+      </div>
+    </div>
+  );
+}
+
+function ConnectBanner({ onConnect }) {
+  return (
+    <div style={{ ...styles.banner, borderColor: COLORS.cyanDim, color: COLORS.cyan }}>
+      <Link2 size={14} />
+      <div style={{ flex: 1 }}>
+        <strong>GMAIL OFFLINE.</strong> Connect to pull live thread state.
+      </div>
+      <button onClick={onConnect} style={{ ...styles.actionBtn, color: COLORS.cyan, borderColor: COLORS.cyan }}>
+        <Link2 size={11} /> CONNECT GMAIL
+      </button>
+    </div>
+  );
+}
+
+function ErrorBanner({ message, onDismiss }) {
+  return (
+    <div style={{ ...styles.banner, borderColor: COLORS.redDim, color: COLORS.red }}>
+      <AlertTriangle size={14} />
+      <div style={{ flex: 1 }}>{message}</div>
+      <button onClick={onDismiss} style={styles.bannerClose}><XCircle size={14} /></button>
+    </div>
+  );
+}
+
+/* ============================================================
+   BACKGROUND FX
    ============================================================ */
 function BackgroundFX() {
   return (
@@ -339,9 +273,14 @@ function BackgroundFX() {
 /* ============================================================
    TOP BAR
    ============================================================ */
-function TopBar({ now, stats }) {
+function TopBar({ now, stats, authStatus, lastSync, syncing, onSync, onConnect, onDisconnect }) {
   const time = now.toLocaleTimeString('en-US', { hour12: false });
   const date = now.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+
+  const connected = authStatus.connected;
+  const userLine = authStatus.user?.email
+    ? authStatus.user.email.toUpperCase()
+    : 'SHANE MICHELON · PRES';
 
   return (
     <div style={styles.topBar}>
@@ -355,29 +294,54 @@ function TopBar({ now, stats }) {
             ZMM <span style={{ color: COLORS.orange }}>//</span> SPONSOR COMMAND
           </div>
           <div style={styles.brandSub}>
-            J.A.R.V.I.S. · OUTREACH INTELLIGENCE LAYER · v0.1
+            J.A.R.V.I.S. · OUTREACH INTELLIGENCE LAYER · v0.2
           </div>
         </div>
       </div>
 
       <div style={styles.topCenter}>
         <Pill icon={Power} color={COLORS.green} label="ONLINE" pulse />
-        <Pill icon={Wifi} color={COLORS.cyan} label="GMAIL LINK · LIVE" />
+        {connected ? (
+          <Pill icon={Wifi} color={COLORS.cyan} label="GMAIL LIVE" />
+        ) : (
+          <Pill icon={Wifi} color={COLORS.textDim} label="GMAIL OFFLINE" />
+        )}
         <Pill icon={Lock} color={COLORS.cyan} label="MCP SECURE" />
         {stats.overdue.length > 0 && (
-          <Pill
-            icon={AlertTriangle}
-            color={COLORS.red}
-            label={`${stats.overdue.length} OVERDUE`}
-            pulse
-          />
+          <Pill icon={AlertTriangle} color={COLORS.red} label={`${stats.overdue.length} OVERDUE`} pulse />
+        )}
+        <button
+          onClick={onSync}
+          disabled={syncing || !connected}
+          title={connected ? 'Resync Gmail' : 'Connect Gmail first'}
+          style={{
+            ...styles.iconBtn,
+            color: connected ? COLORS.cyan : COLORS.textDim,
+            borderColor: connected ? COLORS.cyanDim : COLORS.border,
+          }}
+        >
+          <RefreshCw size={11} style={syncing ? { animation: 'spin 1s linear infinite' } : undefined} />
+        </button>
+        {connected && (
+          <button
+            onClick={onDisconnect}
+            title="Disconnect Gmail"
+            style={{ ...styles.iconBtn, color: COLORS.textDim, borderColor: COLORS.border }}
+          >
+            <LogOut size={11} />
+          </button>
         )}
       </div>
 
       <div style={styles.topRight}>
         <div style={styles.clock}>{time}</div>
         <div style={styles.clockDate}>{date.toUpperCase()}</div>
-        <div style={styles.clockUser}>SHANE MICHELON · PRES</div>
+        <div style={styles.clockUser}>{userLine}</div>
+        {connected && (
+          <div style={styles.clockSync}>
+            SYNC {lastSync ? relativeTime(lastSync, now) : '—'}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -426,38 +390,14 @@ function CornerMarks({ accent }) {
 /* ============================================================
    KPI PANEL
    ============================================================ */
-function KpiPanel({ stats }) {
+function KpiPanel({ stats, loading }) {
   return (
     <Panel title="MISSION BRIEF" icon={Activity}>
       <div style={styles.kpiGrid}>
-        <KpiCard
-          label="CLOSED REV"
-          value={`$${(stats.closedValue / 1000).toFixed(0)}K`}
-          sub={`${stats.closed} SIGNED`}
-          color={COLORS.green}
-          icon={CheckCircle2}
-        />
-        <KpiCard
-          label="IN-DEAL PIPE"
-          value={`$${(stats.pipelineValue / 1000).toFixed(0)}K`}
-          sub={`${stats.inDeal} ACTIVE`}
-          color={COLORS.orange}
-          icon={TrendingUp}
-        />
-        <KpiCard
-          label="ENGAGED"
-          value={stats.engaged}
-          sub="EARLY THREADS"
-          color={COLORS.cyan}
-          icon={MessageSquare}
-        />
-        <KpiCard
-          label="COLD QUEUE"
-          value={stats.cold}
-          sub="AWAITING REPLY"
-          color={COLORS.textDim}
-          icon={Inbox}
-        />
+        <KpiCard label="CLOSED REV"   value={loading ? '…' : `$${(stats.closedValue / 1000).toFixed(0)}K`} sub={`${stats.closed} SIGNED`}     color={COLORS.green}   icon={CheckCircle2} />
+        <KpiCard label="IN-DEAL PIPE" value={loading ? '…' : `$${(stats.pipelineValue / 1000).toFixed(0)}K`} sub={`${stats.inDeal} ACTIVE`}  color={COLORS.orange}  icon={TrendingUp} />
+        <KpiCard label="ENGAGED"      value={loading ? '…' : stats.engaged} sub="EARLY THREADS"                                                  color={COLORS.cyan}    icon={MessageSquare} />
+        <KpiCard label="COLD QUEUE"   value={loading ? '…' : stats.cold}    sub="AWAITING REPLY"                                                 color={COLORS.textDim} icon={Inbox} />
       </div>
     </Panel>
   );
@@ -487,17 +427,12 @@ function FollowUpPanel({ overdue, dueSoon, onSelect, onMark }) {
     ...overdue.map((s) => ({ ...s, _flag: 'OVERDUE' })),
     ...dueSoon.map((s) => ({ ...s, _flag: 'DUE' })),
   ];
-
   return (
     <Panel
       title="FOLLOW-UP QUEUE"
       icon={Clock}
       accent={COLORS.orange}
-      right={
-        <span style={{ color: COLORS.textDim, fontSize: 10 }}>
-          {items.length} ACTION{items.length === 1 ? '' : 'S'}
-        </span>
-      }
+      right={<span style={{ color: COLORS.textDim, fontSize: 10 }}>{items.length} ACTION{items.length === 1 ? '' : 'S'}</span>}
     >
       {items.length === 0 ? (
         <div style={styles.emptyMsg}>
@@ -509,24 +444,19 @@ function FollowUpPanel({ overdue, dueSoon, onSelect, onMark }) {
           {items.map((s) => {
             const meta = STAGE_META[s.stage];
             const isOverdue = s._flag === 'OVERDUE';
-            const dayDelta = Math.round((new Date(s.followUpDue) - today) / (1000 * 60 * 60 * 24));
+            const dayDelta = Math.round((new Date(s.followUpDue) - new Date()) / (1000 * 60 * 60 * 24));
             return (
               <div
                 key={s.id}
-                style={{
-                  ...styles.followItem,
-                  borderColor: isOverdue ? COLORS.redDim : COLORS.orangeDim,
-                }}
+                style={{ ...styles.followItem, borderColor: isOverdue ? COLORS.redDim : COLORS.orangeDim }}
                 onClick={() => onSelect(s.id)}
               >
                 <div style={styles.followLeft}>
-                  <div
-                    style={{
-                      ...styles.followDot,
-                      background: isOverdue ? COLORS.red : COLORS.orange,
-                      boxShadow: `0 0 8px ${isOverdue ? COLORS.red : COLORS.orange}`,
-                    }}
-                  />
+                  <div style={{
+                    ...styles.followDot,
+                    background: isOverdue ? COLORS.red : COLORS.orange,
+                    boxShadow: `0 0 8px ${isOverdue ? COLORS.red : COLORS.orange}`,
+                  }} />
                   <div>
                     <div style={styles.followName}>{s.name}</div>
                     <div style={styles.followMeta}>
@@ -537,25 +467,16 @@ function FollowUpPanel({ overdue, dueSoon, onSelect, onMark }) {
                   </div>
                 </div>
                 <div style={styles.followRight}>
-                  <div
-                    style={{
-                      ...styles.followBadge,
-                      color: isOverdue ? COLORS.red : COLORS.orange,
-                      borderColor: isOverdue ? COLORS.redDim : COLORS.orangeDim,
-                    }}
-                  >
-                    {isOverdue
-                      ? `${Math.abs(dayDelta)}D LATE`
-                      : dayDelta === 0
-                      ? 'TODAY'
-                      : `${dayDelta}D`}
+                  <div style={{
+                    ...styles.followBadge,
+                    color: isOverdue ? COLORS.red : COLORS.orange,
+                    borderColor: isOverdue ? COLORS.redDim : COLORS.orangeDim,
+                  }}>
+                    {isOverdue ? `${Math.abs(dayDelta)}D LATE` : dayDelta === 0 ? 'TODAY' : `${dayDelta}D`}
                   </div>
                   <button
                     style={styles.followBtn}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onMark(s.id);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); onMark(s.id); }}
                     title="Mark followed up"
                   >
                     <Send size={11} />
@@ -573,13 +494,17 @@ function FollowUpPanel({ overdue, dueSoon, onSelect, onMark }) {
 /* ============================================================
    RULES PANEL
    ============================================================ */
-function RulesPanel() {
+function RulesPanel({ rules }) {
+  const items = rules.map((text, i) => {
+    const key = ['cc', 'block', 'intro'][i] || 'rule';
+    return { id: key + i, text, Icon: RULE_ICONS[key] || Shield };
+  });
   return (
     <Panel title="HARD RULES" icon={Shield} accent={COLORS.red}>
       <div style={styles.rulesList}>
-        {HARD_RULES.map((r) => (
+        {items.map((r) => (
           <div key={r.id} style={styles.ruleRow}>
-            <r.icon size={12} color={COLORS.red} />
+            <r.Icon size={12} color={COLORS.red} />
             <span>{r.text}</span>
           </div>
         ))}
@@ -593,19 +518,14 @@ function RulesPanel() {
    ============================================================ */
 function PipelinePanel({
   pipeline, activeStage, setActiveStage, search, setSearch,
-  selectedId, onSelect, totalCount,
+  selectedId, onSelect, totalCount, loading, now,
 }) {
   const tabs = ['ALL', 'CLOSED', 'IN_DEAL', 'ENGAGED', 'COLD', 'PAST', 'BLOCKED'];
-
   return (
     <Panel
       title="SPONSOR PIPELINE"
       icon={Target}
-      right={
-        <span style={{ color: COLORS.textDim, fontSize: 10 }}>
-          {pipeline.length} / {totalCount}
-        </span>
-      }
+      right={<span style={{ color: COLORS.textDim, fontSize: 10 }}>{pipeline.length} / {totalCount}</span>}
     >
       <div style={styles.pipelineControls}>
         <div style={styles.searchBox}>
@@ -641,30 +561,31 @@ function PipelinePanel({
       </div>
 
       <div style={styles.pipelineList}>
-        {pipeline.map((s) => (
-          <PipelineRow
-            key={s.id}
-            sponsor={s}
-            selected={s.id === selectedId}
-            onSelect={onSelect}
-          />
-        ))}
-        {pipeline.length === 0 && (
+        {loading && pipeline.length === 0 ? (
+          <div style={styles.emptyMsg}>
+            <RefreshCw size={14} color={COLORS.cyan} style={{ animation: 'spin 1s linear infinite' }} />
+            <span>LOADING PIPELINE…</span>
+          </div>
+        ) : pipeline.length === 0 ? (
           <div style={styles.emptyMsg}>
             <XCircle size={14} color={COLORS.textDim} />
             <span>NO SPONSORS MATCH FILTER.</span>
           </div>
+        ) : (
+          pipeline.map((s) => (
+            <PipelineRow key={s.id} sponsor={s} selected={s.id === selectedId} onSelect={onSelect} now={now} />
+          ))
         )}
       </div>
     </Panel>
   );
 }
 
-function PipelineRow({ sponsor, selected, onSelect }) {
+function PipelineRow({ sponsor, selected, onSelect, now }) {
   const meta = STAGE_META[sponsor.stage];
   const statusColor = STATUS_META[sponsor.status]?.color || COLORS.textDim;
-  const lastOut = sponsor.lastOutbound ? daysSince(sponsor.lastOutbound) : null;
-  const lastIn = sponsor.lastInbound ? daysSince(sponsor.lastInbound) : null;
+  const lastOut = sponsor.lastOutbound ? daysSince(sponsor.lastOutbound, now) : null;
+  const lastIn = sponsor.lastInbound ? daysSince(sponsor.lastInbound, now) : null;
 
   return (
     <div
@@ -679,12 +600,10 @@ function PipelineRow({ sponsor, selected, onSelect }) {
       <div style={styles.rowMain}>
         <div style={styles.rowTop}>
           <div style={styles.rowName}>{sponsor.name}</div>
-          <div style={{ ...styles.rowStage, color: meta.color, borderColor: meta.color + '55' }}>
-            {meta.label}
-          </div>
+          <div style={{ ...styles.rowStage, color: meta.color, borderColor: meta.color + '55' }}>{meta.label}</div>
         </div>
         <div style={styles.rowMeta}>
-          <span style={{ color: statusColor }}>● {sponsor.status.replace('_', ' ')}</span>
+          <span style={{ color: statusColor }}>● {sponsor.status?.replace('_', ' ')}</span>
           <span style={{ color: COLORS.textDim }}>·</span>
           <span style={{ color: COLORS.textDim }}>{sponsor.event}</span>
           {sponsor.value > 0 && (
@@ -695,15 +614,9 @@ function PipelineRow({ sponsor, selected, onSelect }) {
           )}
         </div>
         <div style={styles.rowMeta}>
-          <span style={{ color: COLORS.textDim }}>
-            <Send size={9} style={{ verticalAlign: 'middle' }} /> {lastOut ?? '—'}D
-          </span>
-          <span style={{ color: COLORS.textDim }}>
-            <Inbox size={9} style={{ verticalAlign: 'middle' }} /> {lastIn ?? '—'}D
-          </span>
-          <span style={{ color: COLORS.textDim }}>
-            <Mail size={9} style={{ verticalAlign: 'middle' }} /> {sponsor.threadCount}
-          </span>
+          <span style={{ color: COLORS.textDim }}><Send size={9} style={{ verticalAlign: 'middle' }} /> {lastOut ?? '—'}D</span>
+          <span style={{ color: COLORS.textDim }}><Inbox size={9} style={{ verticalAlign: 'middle' }} /> {lastIn ?? '—'}D</span>
+          <span style={{ color: COLORS.textDim }}><Mail size={9} style={{ verticalAlign: 'middle' }} /> {sponsor.threadCount}</span>
           <span style={{ color: COLORS.textDim, marginLeft: 'auto' }}>TIER {sponsor.tier}</span>
         </div>
       </div>
@@ -715,13 +628,13 @@ function PipelineRow({ sponsor, selected, onSelect }) {
 /* ============================================================
    BOUNCE PANEL
    ============================================================ */
-function BouncePanel() {
+function BouncePanel({ value }) {
   return (
     <Panel title="DELIVERABILITY" icon={MailX} accent={COLORS.red}>
       <div style={styles.bounceRow}>
         <div>
           <div style={styles.bounceLabel}>HARD BOUNCES</div>
-          <div style={styles.bounceValue}>{HARD_BOUNCES}</div>
+          <div style={styles.bounceValue}>{value}</div>
           <div style={styles.bounceSub}>scrub before next blast</div>
         </div>
         <div style={styles.bounceVisual}>
@@ -735,8 +648,16 @@ function BouncePanel() {
 /* ============================================================
    DETAIL PANEL
    ============================================================ */
-function DetailPanel({ sponsor, onMark }) {
-  if (!sponsor) return null;
+function DetailPanel({ sponsor, onMark, now }) {
+  if (!sponsor) {
+    return (
+      <Panel title="TARGET DETAIL" icon={Eye}>
+        <div style={styles.emptyMsg}>
+          <span>SELECT A SPONSOR.</span>
+        </div>
+      </Panel>
+    );
+  }
   const meta = STAGE_META[sponsor.stage];
   const statusColor = STATUS_META[sponsor.status]?.color || COLORS.textDim;
 
@@ -744,50 +665,26 @@ function DetailPanel({ sponsor, onMark }) {
     <Panel
       title="TARGET DETAIL"
       icon={Eye}
-      right={
-        <div style={{ ...styles.detailStage, color: meta.color, borderColor: meta.color + '55' }}>
-          {meta.label}
-        </div>
-      }
+      right={<div style={{ ...styles.detailStage, color: meta.color, borderColor: meta.color + '55' }}>{meta.label}</div>}
     >
       <div style={styles.detailName}>{sponsor.name}</div>
       <div style={styles.detailContact}>
-        <Mail size={11} color={COLORS.cyan} /> {sponsor.contact}
+        <Mail size={11} color={COLORS.cyan} /> {sponsor.contact || '—'}
       </div>
 
       <div style={styles.detailGrid}>
-        <DetailStat label="STATUS" value={sponsor.status.replace('_', ' ')} color={statusColor} />
-        <DetailStat label="EVENT" value={sponsor.event} color={COLORS.text} />
-        <DetailStat label="TIER" value={sponsor.tier} color={COLORS.orange} />
-        <DetailStat
-          label="DEAL VALUE"
-          value={sponsor.value ? `$${(sponsor.value / 1000).toFixed(0)}K` : '—'}
-          color={COLORS.green}
-        />
-        <DetailStat
-          label="LAST OUTBOUND"
-          value={sponsor.lastOutbound ? `${daysSince(sponsor.lastOutbound)}D AGO` : '—'}
-          color={COLORS.cyan}
-        />
-        <DetailStat
-          label="LAST INBOUND"
-          value={sponsor.lastInbound ? `${daysSince(sponsor.lastInbound)}D AGO` : '—'}
-          color={COLORS.cyan}
-        />
+        <DetailStat label="STATUS"        value={sponsor.status?.replace('_', ' ')} color={statusColor} />
+        <DetailStat label="EVENT"         value={sponsor.event} color={COLORS.text} />
+        <DetailStat label="TIER"          value={sponsor.tier}  color={COLORS.orange} />
+        <DetailStat label="DEAL VALUE"    value={sponsor.value ? `$${(sponsor.value / 1000).toFixed(0)}K` : '—'} color={COLORS.green} />
+        <DetailStat label="LAST OUTBOUND" value={sponsor.lastOutbound ? `${daysSince(sponsor.lastOutbound, now)}D AGO` : '—'} color={COLORS.cyan} />
+        <DetailStat label="LAST INBOUND"  value={sponsor.lastInbound  ? `${daysSince(sponsor.lastInbound, now)}D AGO`  : '—'} color={COLORS.cyan} />
         <DetailStat
           label="FOLLOW-UP"
-          value={
-            sponsor.followUpDue
-              ? formatFollowUp(sponsor.followUpDue)
-              : '—'
-          }
-          color={
-            sponsor.followUpDue && new Date(sponsor.followUpDue) < today
-              ? COLORS.red
-              : COLORS.yellow
-          }
+          value={sponsor.followUpDue ? formatFollowUp(sponsor.followUpDue, now) : '—'}
+          color={sponsor.followUpDue && new Date(sponsor.followUpDue) < now ? COLORS.red : COLORS.yellow}
         />
-        <DetailStat label="THREADS" value={sponsor.threadCount} color={COLORS.text} />
+        <DetailStat label="THREADS" value={sponsor.threadCount ?? 0} color={COLORS.text} />
       </div>
 
       {sponsor.notes && (
@@ -805,11 +702,17 @@ function DetailPanel({ sponsor, onMark }) {
         >
           <Send size={11} /> MARK FOLLOWED UP
         </button>
+        {sponsor.threadIds?.[0] && (
+          <a
+            href={`https://mail.google.com/mail/u/0/#inbox/${sponsor.threadIds[0]}`}
+            target="_blank" rel="noreferrer"
+            style={{ ...styles.actionBtn, color: COLORS.green, borderColor: COLORS.greenDim, textDecoration: 'none' }}
+          >
+            <ArrowUpRight size={11} /> OPEN THREAD
+          </a>
+        )}
         <button style={{ ...styles.actionBtn, color: COLORS.orange, borderColor: COLORS.orangeDim }}>
           <Calendar size={11} /> SCHEDULE
-        </button>
-        <button style={{ ...styles.actionBtn, color: COLORS.green, borderColor: COLORS.greenDim }}>
-          <ArrowUpRight size={11} /> OPEN THREAD
         </button>
       </div>
     </Panel>
@@ -826,80 +729,85 @@ function DetailStat({ label, value, color }) {
 }
 
 /* ============================================================
-   JARVIS CHAT PANEL
+   JARVIS CHAT
    ============================================================ */
 function JarvisPanel({ open, setOpen, sponsor, stats }) {
-  const [messages, setMessages] = useState([
-    {
-      role: 'jarvis',
-      text:
-        "Good day, Mr. Michelon. Outreach intelligence layer online. I'm tracking " +
-        `${stats.total} sponsor threads. ` +
-        (stats.overdue.length
-          ? `Heads up: ${stats.overdue.length} follow-up${stats.overdue.length === 1 ? ' is' : 's are'} overdue.`
-          : 'All follow-ups on schedule.'),
-    },
-  ]);
+  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
+  const [model, setModel] = useState(null);
   const scrollRef = useRef(null);
 
+  // Seed greeting once we have stats
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    if (messages.length === 0 && stats.total > 0) {
+      setMessages([{
+        role: 'jarvis',
+        content:
+          "Good day, Mr. Michelon. Outreach intelligence layer online. I'm tracking " +
+          `${stats.total} sponsor threads. ` +
+          (stats.overdue.length
+            ? `${stats.overdue.length} follow-up${stats.overdue.length === 1 ? ' is' : 's are'} overdue.`
+            : 'All follow-ups on schedule.'),
+      }]);
     }
+  }, [stats.total, stats.overdue.length, messages.length]);
+
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [messages, thinking]);
 
-  const send = () => {
+  const send = async () => {
     const text = input.trim();
     if (!text) return;
-    setMessages((m) => [...m, { role: 'user', text }]);
+    const next = [...messages, { role: 'user', content: text }];
+    setMessages(next);
     setInput('');
     setThinking(true);
-    // Simulated Jarvis. The README notes the live Anthropic call requires
-    // a backend proxy off-sandbox — kept simulated here so the dashboard
-    // works locally without a key.
-    setTimeout(() => {
-      setMessages((m) => [...m, { role: 'jarvis', text: jarvisReply(text, sponsor, stats) }]);
+    try {
+      const res = await api.jarvis(next);
+      setMessages([...next, { role: 'jarvis', content: res.text }]);
+      setModel(res.model);
+    } catch (err) {
+      setMessages([...next, { role: 'jarvis', content: `Comm error: ${err.message}` }]);
+    } finally {
       setThinking(false);
-    }, 750);
+    }
   };
+
+  const liveHint = model === 'simulated'
+    ? 'Simulated mode. Set ANTHROPIC_API_KEY to enable live JARVIS.'
+    : model
+    ? `Live · ${model}`
+    : 'Ready.';
 
   return (
     <Panel
       title="J.A.R.V.I.S."
       icon={Cpu}
       accent={COLORS.cyan}
-      right={
-        <button onClick={() => setOpen(!open)} style={styles.collapseBtn}>
-          {open ? '−' : '+'}
-        </button>
-      }
+      right={<button onClick={() => setOpen(!open)} style={styles.collapseBtn}>{open ? '−' : '+'}</button>}
     >
       {open && (
         <>
           <div ref={scrollRef} style={styles.chatLog}>
             {messages.map((m, i) => (
-              <ChatBubble key={i} role={m.role} text={m.text} />
+              <ChatBubble key={i} role={m.role} text={m.content} />
             ))}
-            {thinking && (
-              <ChatBubble role="jarvis" text="…" />
-            )}
+            {thinking && <ChatBubble role="jarvis" text="…" />}
           </div>
           <div style={styles.chatInputRow}>
             <input
               value={input}
-              placeholder="ask jarvis..."
+              placeholder={sponsor ? `ask about ${sponsor.name}...` : 'ask jarvis...'}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && send()}
               style={styles.chatInput}
             />
-            <button onClick={send} style={styles.chatSend}>
-              <Send size={12} />
-            </button>
+            <button onClick={send} style={styles.chatSend}><Send size={12} /></button>
           </div>
           <div style={styles.chatHint}>
-            <Sparkles size={9} /> Simulated mode. Wire backend proxy to enable live Gmail MCP.
+            <Sparkles size={9} /> {liveHint}
           </div>
         </>
       )}
@@ -912,85 +820,79 @@ function ChatBubble({ role, text }) {
   return (
     <div style={{ ...styles.chatBubble, alignSelf: isUser ? 'flex-end' : 'flex-start' }}>
       <div style={styles.chatBubbleLabel}>{isUser ? 'SHANE' : 'JARVIS'}</div>
-      <div
-        style={{
-          ...styles.chatBubbleText,
-          color: isUser ? COLORS.orange : COLORS.cyan,
-          borderColor: isUser ? COLORS.orangeDim : COLORS.cyanDim,
-        }}
-      >
+      <div style={{
+        ...styles.chatBubbleText,
+        color: isUser ? COLORS.orange : COLORS.cyan,
+        borderColor: isUser ? COLORS.orangeDim : COLORS.cyanDim,
+        whiteSpace: 'pre-wrap',
+      }}>
         {text}
       </div>
     </div>
   );
 }
 
-/* Lightweight simulated responder. Replaces a real Claude call. */
-function jarvisReply(userText, sponsor, stats) {
-  const q = userText.toLowerCase();
-  if (q.includes('overdue') || q.includes('follow')) {
-    if (stats.overdue.length === 0) return 'No overdue follow-ups, sir. The queue is clear.';
-    const names = stats.overdue.slice(0, 4).map((s) => s.name).join(', ');
-    return `Overdue threads: ${names}. Recommend prioritizing ${stats.overdue[0].name} — it has been waiting longest.`;
-  }
-  if (q.includes('pipeline') || q.includes('value') || q.includes('revenue')) {
-    return `Closed revenue: $${(stats.closedValue / 1000).toFixed(0)}K. In-deal pipeline: $${(stats.pipelineValue / 1000).toFixed(0)}K across ${stats.inDeal} active negotiations.`;
-  }
-  if (q.includes('draft') || q.includes('write') || q.includes('email')) {
-    return `Drafting follow-up to ${sponsor.name} (${sponsor.contact}). I will CC zach@zmmevents.com and use the standard ZMM Events intro. Approve before send.`;
-  }
-  if (q.includes('constellation')) {
-    return 'Constellation Brands is hard-blocked per legal directive. I will not draft, send, or surface outreach to that entity.';
-  }
-  if (q.includes(sponsor.name.toLowerCase())) {
-    return `${sponsor.name}: ${sponsor.status.replace('_', ' ')}. Last outbound ${daysSince(sponsor.lastOutbound) || '—'} days ago. ${sponsor.notes || ''}`;
-  }
-  return 'Acknowledged. Provide a sponsor name, event, or action and I will execute.';
-}
-
 /* ============================================================
    UTILS
    ============================================================ */
-function daysSince(iso) {
-  if (!iso) return null;
-  return Math.floor((today - new Date(iso)) / (1000 * 60 * 60 * 24));
+function computeStats(sponsors, now) {
+  const closed = sponsors.filter((s) => s.stage === 'CLOSED');
+  const inDeal = sponsors.filter((s) => s.stage === 'IN_DEAL');
+  const engaged = sponsors.filter((s) => s.stage === 'ENGAGED');
+  const cold = sponsors.filter((s) => s.stage === 'COLD');
+  const closedValue = closed.reduce((a, s) => a + (s.value || 0), 0);
+  const pipelineValue = inDeal.reduce((a, s) => a + (s.value || 0), 0);
+  const overdue = sponsors.filter(
+    (s) => s.followUpDue && new Date(s.followUpDue) < now && s.stage !== 'CLOSED' && s.stage !== 'BLOCKED'
+  );
+  const dueSoon = sponsors.filter((s) => {
+    if (!s.followUpDue) return false;
+    const due = new Date(s.followUpDue);
+    const days = (due - now) / (1000 * 60 * 60 * 24);
+    return days >= 0 && days <= 3 && s.stage !== 'CLOSED';
+  });
+  return {
+    closed: closed.length, inDeal: inDeal.length, engaged: engaged.length, cold: cold.length,
+    closedValue, pipelineValue, overdue, dueSoon, total: sponsors.length,
+  };
 }
-function formatFollowUp(iso) {
-  const delta = Math.round((new Date(iso) - today) / (1000 * 60 * 60 * 24));
+
+function daysSince(iso, now = new Date()) {
+  if (!iso) return null;
+  return Math.floor((now - new Date(iso)) / (1000 * 60 * 60 * 24));
+}
+
+function formatFollowUp(iso, now = new Date()) {
+  const delta = Math.round((new Date(iso) - now) / (1000 * 60 * 60 * 24));
   if (delta < 0) return `${Math.abs(delta)}D LATE`;
   if (delta === 0) return 'TODAY';
   return `IN ${delta}D`;
 }
 
+function relativeTime(iso, now = new Date()) {
+  const seconds = Math.floor((now - new Date(iso)) / 1000);
+  if (seconds < 5) return 'JUST NOW';
+  if (seconds < 60) return `${seconds}S AGO`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}M AGO`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}H AGO`;
+  return `${Math.floor(seconds / 86400)}D AGO`;
+}
+
 /* ============================================================
-   KEYFRAMES (CSS injected as global)
+   KEYFRAMES
    ============================================================ */
 function GlobalKeyframes() {
   return (
     <style>{`
-      @keyframes pulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.35; }
-      }
-      @keyframes flicker {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.6; transform: scale(0.94); }
-      }
-      @keyframes scan {
-        0% { transform: translateY(-100%); }
-        100% { transform: translateY(100vh); }
-      }
-      @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
-      }
-      @keyframes drift {
-        0%, 100% { transform: translate(0, 0); }
-        50% { transform: translate(20px, -20px); }
-      }
+      @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+      @keyframes flicker { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.94); } }
+      @keyframes scan { 0% { transform: translateY(-100%); } 100% { transform: translateY(100vh); } }
+      @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      @keyframes drift { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(20px, -20px); } }
       input::placeholder { color: ${COLORS.textDim}; }
       button { cursor: pointer; }
       button:disabled { opacity: 0.4; cursor: not-allowed; }
+      code { background: rgba(0,0,0,0.4); padding: 1px 5px; border-radius: 2px; }
       ::-webkit-scrollbar { width: 6px; height: 6px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: ${COLORS.cyanDim}; border-radius: 3px; }
@@ -1002,305 +904,107 @@ function GlobalKeyframes() {
    STYLES
    ============================================================ */
 const styles = {
-  shell: {
-    minHeight: '100vh',
-    color: COLORS.text,
-    fontFamily: FONT_MONO,
-    fontSize: 12,
-    padding: 16,
-    boxSizing: 'border-box',
-    position: 'relative',
-    overflow: 'hidden',
-  },
+  shell: { minHeight: '100vh', color: COLORS.text, fontFamily: FONT_MONO, fontSize: 12, padding: 16, boxSizing: 'border-box', position: 'relative', overflow: 'hidden' },
   bgGrid: {
     position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0,
-    backgroundImage:
-      `linear-gradient(${COLORS.cyanFaint} 1px, transparent 1px), ` +
-      `linear-gradient(90deg, ${COLORS.cyanFaint} 1px, transparent 1px)`,
-    backgroundSize: '48px 48px',
-    opacity: 0.5,
+    backgroundImage: `linear-gradient(${COLORS.cyanFaint} 1px, transparent 1px), linear-gradient(90deg, ${COLORS.cyanFaint} 1px, transparent 1px)`,
+    backgroundSize: '48px 48px', opacity: 0.5,
   },
-  bgGlow1: {
-    position: 'fixed', top: '-10%', left: '-10%', width: 600, height: 600,
-    background: `radial-gradient(circle, ${COLORS.cyanGlow} 0%, transparent 60%)`,
-    filter: 'blur(80px)', opacity: 0.25, pointerEvents: 'none', zIndex: 0,
-    animation: 'drift 14s ease-in-out infinite',
-  },
-  bgGlow2: {
-    position: 'fixed', bottom: '-10%', right: '-10%', width: 600, height: 600,
-    background: `radial-gradient(circle, ${COLORS.orange} 0%, transparent 60%)`,
-    filter: 'blur(80px)', opacity: 0.15, pointerEvents: 'none', zIndex: 0,
-    animation: 'drift 18s ease-in-out infinite reverse',
-  },
-  bgScanline: {
-    position: 'fixed', left: 0, right: 0, height: 2,
-    background: `linear-gradient(90deg, transparent, ${COLORS.cyanGlow}, transparent)`,
-    pointerEvents: 'none', zIndex: 1, opacity: 0.4,
-    animation: 'scan 8s linear infinite',
-  },
+  bgGlow1: { position: 'fixed', top: '-10%', left: '-10%', width: 600, height: 600, background: `radial-gradient(circle, ${COLORS.cyanGlow} 0%, transparent 60%)`, filter: 'blur(80px)', opacity: 0.25, pointerEvents: 'none', zIndex: 0, animation: 'drift 14s ease-in-out infinite' },
+  bgGlow2: { position: 'fixed', bottom: '-10%', right: '-10%', width: 600, height: 600, background: `radial-gradient(circle, ${COLORS.orange} 0%, transparent 60%)`, filter: 'blur(80px)', opacity: 0.15, pointerEvents: 'none', zIndex: 0, animation: 'drift 18s ease-in-out infinite reverse' },
+  bgScanline: { position: 'fixed', left: 0, right: 0, height: 2, background: `linear-gradient(90deg, transparent, ${COLORS.cyanGlow}, transparent)`, pointerEvents: 'none', zIndex: 1, opacity: 0.4, animation: 'scan 8s linear infinite' },
 
-  topBar: {
-    position: 'relative', zIndex: 2,
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '12px 18px', marginBottom: 16,
-    background: COLORS.bgPanel, border: `1px solid ${COLORS.border}`,
-    borderRadius: 4, backdropFilter: 'blur(8px)',
-  },
+  topBar: { position: 'relative', zIndex: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 18px', marginBottom: 16, background: COLORS.bgPanel, border: `1px solid ${COLORS.border}`, borderRadius: 4, backdropFilter: 'blur(8px)' },
   topLeft: { display: 'flex', alignItems: 'center', gap: 14 },
   topCenter: { display: 'flex', gap: 8, alignItems: 'center' },
   topRight: { textAlign: 'right' },
-  brand: {
-    fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 18,
-    color: COLORS.cyan, letterSpacing: '0.12em',
-    textShadow: `0 0 12px ${COLORS.cyanGlow}`,
-  },
+  brand: { fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 18, color: COLORS.cyan, letterSpacing: '0.12em', textShadow: `0 0 12px ${COLORS.cyanGlow}` },
   brandSub: { fontSize: 9, color: COLORS.textDim, letterSpacing: '0.22em', marginTop: 2 },
-  clock: {
-    fontFamily: FONT_DISPLAY, fontSize: 20, color: COLORS.cyan,
-    letterSpacing: '0.12em', textShadow: `0 0 8px ${COLORS.cyanGlow}`,
-  },
+  clock: { fontFamily: FONT_DISPLAY, fontSize: 20, color: COLORS.cyan, letterSpacing: '0.12em', textShadow: `0 0 8px ${COLORS.cyanGlow}` },
   clockDate: { fontSize: 9, color: COLORS.textDim, letterSpacing: '0.2em', marginTop: 2 },
   clockUser: { fontSize: 9, color: COLORS.orange, letterSpacing: '0.18em', marginTop: 2 },
+  clockSync: { fontSize: 8, color: COLORS.textDim, letterSpacing: '0.18em', marginTop: 2 },
+  reactorMini: { position: 'relative', width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center' },
+  reactorCore: { width: 12, height: 12, borderRadius: '50%', background: COLORS.cyan, boxShadow: `0 0 14px ${COLORS.cyan}, 0 0 26px ${COLORS.cyanGlow}` },
+  reactorRing: { position: 'absolute', inset: 0, borderRadius: '50%', border: `1px solid ${COLORS.cyan}`, borderTopColor: 'transparent', animation: 'spin 4s linear infinite' },
+  pill: { display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px', border: '1px solid', borderRadius: 2, fontSize: 9, letterSpacing: '0.16em', background: 'rgba(0,0,0,0.3)' },
+  iconBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, border: '1px solid', borderRadius: 2, background: 'rgba(0,0,0,0.3)' },
 
-  reactorMini: {
-    position: 'relative', width: 36, height: 36,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  reactorCore: {
-    width: 12, height: 12, borderRadius: '50%',
-    background: COLORS.cyan, boxShadow: `0 0 14px ${COLORS.cyan}, 0 0 26px ${COLORS.cyanGlow}`,
-  },
-  reactorRing: {
-    position: 'absolute', inset: 0, borderRadius: '50%',
-    border: `1px solid ${COLORS.cyan}`, borderTopColor: 'transparent',
-    animation: 'spin 4s linear infinite',
-  },
+  banner: { position: 'relative', zIndex: 2, display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', marginBottom: 12, background: COLORS.bgPanel, border: '1px solid', borderRadius: 4, fontSize: 11, letterSpacing: '0.04em' },
+  bannerClose: { background: 'transparent', border: 'none', color: 'inherit', display: 'flex', alignItems: 'center' },
 
-  pill: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    padding: '4px 10px', border: '1px solid',
-    borderRadius: 2, fontSize: 9, letterSpacing: '0.16em',
-    background: 'rgba(0,0,0,0.3)',
-  },
-
-  mainGrid: {
-    position: 'relative', zIndex: 2,
-    display: 'grid', gridTemplateColumns: '1fr 1.3fr 1fr',
-    gap: 16, alignItems: 'start',
-  },
+  mainGrid: { position: 'relative', zIndex: 2, display: 'grid', gridTemplateColumns: '1fr 1.3fr 1fr', gap: 16, alignItems: 'start' },
   col: { display: 'flex', flexDirection: 'column', gap: 16 },
 
-  panel: {
-    position: 'relative',
-    background: COLORS.bgPanel,
-    border: `1px solid ${COLORS.border}`,
-    borderRadius: 4,
-    backdropFilter: 'blur(8px)',
-    overflow: 'hidden',
-  },
-  panelHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '8px 14px', borderBottom: '1px solid',
-    fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 10,
-    background: 'rgba(0,0,0,0.25)',
-  },
+  panel: { position: 'relative', background: COLORS.bgPanel, border: `1px solid ${COLORS.border}`, borderRadius: 4, backdropFilter: 'blur(8px)', overflow: 'hidden' },
+  panelHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 14px', borderBottom: '1px solid', fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 10, background: 'rgba(0,0,0,0.25)' },
   panelHeaderLeft: { display: 'flex', alignItems: 'center', gap: 8 },
   panelBody: { padding: 14 },
 
-  kpiGrid: {
-    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
-  },
-  kpiCard: {
-    border: '1px solid', padding: 10, background: 'rgba(0,0,0,0.2)',
-    position: 'relative',
-  },
-  kpiLabel: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    fontSize: 9, letterSpacing: '0.18em', marginBottom: 6,
-  },
-  kpiValue: {
-    fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 22,
-    letterSpacing: '0.04em',
-  },
+  kpiGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 },
+  kpiCard: { border: '1px solid', padding: 10, background: 'rgba(0,0,0,0.2)', position: 'relative' },
+  kpiLabel: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, letterSpacing: '0.18em', marginBottom: 6 },
+  kpiValue: { fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 22, letterSpacing: '0.04em' },
   kpiSub: { fontSize: 8, color: COLORS.textDim, letterSpacing: '0.18em', marginTop: 2 },
   kpiBar: { height: 2, marginTop: 8, borderRadius: 1, overflow: 'hidden' },
   kpiBarFill: { height: '100%' },
 
-  emptyMsg: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    padding: '12px 0', color: COLORS.textDim, fontSize: 10, letterSpacing: '0.14em',
-  },
+  emptyMsg: { display: 'flex', alignItems: 'center', gap: 8, padding: '12px 0', color: COLORS.textDim, fontSize: 10, letterSpacing: '0.14em' },
 
   followList: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 240, overflowY: 'auto' },
-  followItem: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '8px 10px', border: '1px solid', borderRadius: 2,
-    background: 'rgba(0,0,0,0.2)', cursor: 'pointer',
-    transition: 'background 0.15s',
-  },
+  followItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', border: '1px solid', borderRadius: 2, background: 'rgba(0,0,0,0.2)', cursor: 'pointer', transition: 'background 0.15s' },
   followLeft: { display: 'flex', alignItems: 'center', gap: 10 },
   followDot: { width: 6, height: 6, borderRadius: '50%' },
   followName: { fontSize: 12, color: COLORS.text, fontWeight: 600 },
   followMeta: { fontSize: 9, color: COLORS.textDim, letterSpacing: '0.1em', display: 'flex', gap: 5, marginTop: 2 },
   followRight: { display: 'flex', alignItems: 'center', gap: 8 },
-  followBadge: {
-    border: '1px solid', padding: '3px 7px', fontSize: 9,
-    letterSpacing: '0.14em', borderRadius: 2,
-  },
-  followBtn: {
-    background: 'transparent', border: `1px solid ${COLORS.cyanDim}`,
-    color: COLORS.cyan, padding: 5, borderRadius: 2,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
+  followBadge: { border: '1px solid', padding: '3px 7px', fontSize: 9, letterSpacing: '0.14em', borderRadius: 2 },
+  followBtn: { background: 'transparent', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.cyan, padding: 5, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center' },
 
   rulesList: { display: 'flex', flexDirection: 'column', gap: 8 },
-  ruleRow: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    fontSize: 10.5, color: COLORS.text, letterSpacing: '0.04em',
-    padding: '4px 0',
-  },
+  ruleRow: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 10.5, color: COLORS.text, letterSpacing: '0.04em', padding: '4px 0' },
 
   pipelineControls: { display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 12 },
-  searchBox: {
-    display: 'flex', alignItems: 'center', gap: 8,
-    border: `1px solid ${COLORS.border}`, padding: '6px 10px',
-    background: 'rgba(0,0,0,0.3)', borderRadius: 2,
-  },
-  searchInput: {
-    background: 'transparent', border: 'none', outline: 'none',
-    color: COLORS.text, fontFamily: FONT_MONO, fontSize: 11, flex: 1,
-  },
+  searchBox: { display: 'flex', alignItems: 'center', gap: 8, border: `1px solid ${COLORS.border}`, padding: '6px 10px', background: 'rgba(0,0,0,0.3)', borderRadius: 2 },
+  searchInput: { background: 'transparent', border: 'none', outline: 'none', color: COLORS.text, fontFamily: FONT_MONO, fontSize: 11, flex: 1 },
   tabs: { display: 'flex', flexWrap: 'wrap', gap: 4 },
-  tab: {
-    border: '1px solid', padding: '4px 9px', fontSize: 9,
-    letterSpacing: '0.16em', fontFamily: FONT_MONO, fontWeight: 600,
-    borderRadius: 2, background: 'transparent',
-    transition: 'all 0.12s',
-  },
+  tab: { border: '1px solid', padding: '4px 9px', fontSize: 9, letterSpacing: '0.16em', fontFamily: FONT_MONO, fontWeight: 600, borderRadius: 2, background: 'transparent', transition: 'all 0.12s' },
 
-  pipelineList: {
-    display: 'flex', flexDirection: 'column', gap: 6,
-    maxHeight: 520, overflowY: 'auto',
-  },
-  row: {
-    position: 'relative',
-    display: 'flex', alignItems: 'center', gap: 10,
-    padding: '10px 12px 10px 14px',
-    border: '1px solid', borderRadius: 2,
-    cursor: 'pointer', transition: 'all 0.12s',
-  },
-  rowStageBar: {
-    position: 'absolute', left: 0, top: 0, bottom: 0, width: 3,
-  },
+  pipelineList: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 520, overflowY: 'auto' },
+  row: { position: 'relative', display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px 10px 14px', border: '1px solid', borderRadius: 2, cursor: 'pointer', transition: 'all 0.12s' },
+  rowStageBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
   rowMain: { flex: 1, minWidth: 0 },
   rowTop: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
   rowName: { fontSize: 13, fontWeight: 600, color: COLORS.text, letterSpacing: '0.02em' },
-  rowStage: {
-    border: '1px solid', padding: '2px 7px', fontSize: 8,
-    letterSpacing: '0.18em', borderRadius: 2,
-  },
-  rowMeta: {
-    display: 'flex', gap: 10, fontSize: 9.5,
-    letterSpacing: '0.06em', alignItems: 'center', marginTop: 2,
-  },
+  rowStage: { border: '1px solid', padding: '2px 7px', fontSize: 8, letterSpacing: '0.18em', borderRadius: 2 },
+  rowMeta: { display: 'flex', gap: 10, fontSize: 9.5, letterSpacing: '0.06em', alignItems: 'center', marginTop: 2 },
 
-  bounceRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-  },
+  bounceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   bounceLabel: { fontSize: 9, color: COLORS.red, letterSpacing: '0.2em' },
-  bounceValue: {
-    fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 36, color: COLORS.red,
-    textShadow: `0 0 12px ${COLORS.redDim}`, marginTop: 4,
-  },
+  bounceValue: { fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 36, color: COLORS.red, textShadow: `0 0 12px ${COLORS.redDim}`, marginTop: 4 },
   bounceSub: { fontSize: 9, color: COLORS.textDim, letterSpacing: '0.14em', marginTop: 2 },
-  bounceVisual: {
-    width: 60, height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    border: `1px solid ${COLORS.redDim}`, borderRadius: '50%',
-    background: 'rgba(255, 77, 109, 0.06)',
-  },
+  bounceVisual: { width: 60, height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', border: `1px solid ${COLORS.redDim}`, borderRadius: '50%', background: 'rgba(255, 77, 109, 0.06)' },
 
-  detailStage: {
-    border: '1px solid', padding: '2px 8px', fontSize: 9,
-    letterSpacing: '0.18em', borderRadius: 2,
-  },
-  detailName: {
-    fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 22,
-    color: COLORS.cyan, letterSpacing: '0.04em',
-    textShadow: `0 0 10px ${COLORS.cyanGlow}`,
-  },
-  detailContact: {
-    fontSize: 10.5, color: COLORS.textDim, marginTop: 4,
-    display: 'flex', alignItems: 'center', gap: 6,
-  },
-  detailGrid: {
-    display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10,
-    marginTop: 14,
-  },
-  detailStat: {
-    border: `1px solid ${COLORS.border}`, padding: 8,
-    background: 'rgba(0,0,0,0.2)',
-  },
+  detailStage: { border: '1px solid', padding: '2px 8px', fontSize: 9, letterSpacing: '0.18em', borderRadius: 2 },
+  detailName: { fontFamily: FONT_DISPLAY, fontWeight: 700, fontSize: 22, color: COLORS.cyan, letterSpacing: '0.04em', textShadow: `0 0 10px ${COLORS.cyanGlow}` },
+  detailContact: { fontSize: 10.5, color: COLORS.textDim, marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 },
+  detailGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 },
+  detailStat: { border: `1px solid ${COLORS.border}`, padding: 8, background: 'rgba(0,0,0,0.2)' },
   detailStatLabel: { fontSize: 8, color: COLORS.textDim, letterSpacing: '0.18em' },
-  detailStatValue: {
-    fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 13,
-    letterSpacing: '0.04em', marginTop: 3,
-  },
-  detailNotes: {
-    marginTop: 12, padding: 10, border: `1px solid ${COLORS.orangeDim}`,
-    background: 'rgba(255, 154, 60, 0.05)',
-  },
+  detailStatValue: { fontFamily: FONT_DISPLAY, fontWeight: 600, fontSize: 13, letterSpacing: '0.04em', marginTop: 3 },
+  detailNotes: { marginTop: 12, padding: 10, border: `1px solid ${COLORS.orangeDim}`, background: 'rgba(255, 154, 60, 0.05)' },
   detailNotesLabel: { fontSize: 8, color: COLORS.orange, letterSpacing: '0.2em' },
   detailNotesText: { fontSize: 11, color: COLORS.text, marginTop: 4, lineHeight: 1.5 },
-  detailActions: {
-    display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12,
-  },
-  actionBtn: {
-    display: 'flex', alignItems: 'center', gap: 6,
-    background: 'transparent', border: '1px solid',
-    padding: '6px 10px', fontSize: 9, letterSpacing: '0.14em',
-    fontFamily: FONT_MONO, fontWeight: 600,
-    borderRadius: 2,
-  },
+  detailActions: { display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 12 },
+  actionBtn: { display: 'flex', alignItems: 'center', gap: 6, background: 'transparent', border: '1px solid', padding: '6px 10px', fontSize: 9, letterSpacing: '0.14em', fontFamily: FONT_MONO, fontWeight: 600, borderRadius: 2 },
 
-  chatLog: {
-    display: 'flex', flexDirection: 'column', gap: 8,
-    maxHeight: 220, overflowY: 'auto', marginBottom: 10,
-    paddingRight: 4,
-  },
-  chatBubble: {
-    maxWidth: '90%',
-  },
-  chatBubbleLabel: {
-    fontSize: 8, color: COLORS.textDim, letterSpacing: '0.18em', marginBottom: 3,
-  },
-  chatBubbleText: {
-    fontSize: 11, lineHeight: 1.5,
-    border: '1px solid', borderRadius: 2,
-    padding: '7px 10px', background: 'rgba(0,0,0,0.3)',
-  },
-  chatInputRow: {
-    display: 'flex', gap: 6,
-  },
-  chatInput: {
-    flex: 1, background: 'rgba(0,0,0,0.3)',
-    border: `1px solid ${COLORS.cyanDim}`, color: COLORS.text,
-    fontFamily: FONT_MONO, fontSize: 11, padding: '7px 10px',
-    outline: 'none', borderRadius: 2,
-  },
-  chatSend: {
-    background: COLORS.cyan, color: COLORS.bg, border: 'none',
-    padding: '0 12px', display: 'flex', alignItems: 'center',
-    borderRadius: 2,
-  },
-  chatHint: {
-    display: 'flex', alignItems: 'center', gap: 5,
-    fontSize: 8, color: COLORS.textDim,
-    letterSpacing: '0.14em', marginTop: 8,
-  },
-  collapseBtn: {
-    background: 'transparent', border: `1px solid ${COLORS.cyanDim}`,
-    color: COLORS.cyan, width: 20, height: 20,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    borderRadius: 2, fontSize: 14, lineHeight: 1,
-  },
+  chatLog: { display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 260, overflowY: 'auto', marginBottom: 10, paddingRight: 4 },
+  chatBubble: { maxWidth: '92%' },
+  chatBubbleLabel: { fontSize: 8, color: COLORS.textDim, letterSpacing: '0.18em', marginBottom: 3 },
+  chatBubbleText: { fontSize: 11, lineHeight: 1.5, border: '1px solid', borderRadius: 2, padding: '7px 10px', background: 'rgba(0,0,0,0.3)' },
+  chatInputRow: { display: 'flex', gap: 6 },
+  chatInput: { flex: 1, background: 'rgba(0,0,0,0.3)', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.text, fontFamily: FONT_MONO, fontSize: 11, padding: '7px 10px', outline: 'none', borderRadius: 2 },
+  chatSend: { background: COLORS.cyan, color: COLORS.bg, border: 'none', padding: '0 12px', display: 'flex', alignItems: 'center', borderRadius: 2 },
+  chatHint: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 8, color: COLORS.textDim, letterSpacing: '0.14em', marginTop: 8 },
+  collapseBtn: { background: 'transparent', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.cyan, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 2, fontSize: 14, lineHeight: 1 },
 };
