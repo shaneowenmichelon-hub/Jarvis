@@ -9,12 +9,19 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync } from 'node:fs';
 
-import { isConfigured as oauthConfigured, getAuthUrl, exchangeCode } from './auth.js';
+import {
+  isConfigured as oauthConfigured,
+  getAuthUrl,
+  exchangeCode,
+  grantedScopeKeys,
+  REQUIRED_SCOPE_KEYS,
+} from './auth.js';
 import { getStatus, syncAllSponsors, getEnrichedSponsors } from './gmail.js';
 import { loadStore, clearTokens, setOverride, setHardBounces } from './store.js';
 import { HARD_RULES, EVENTS, HARD_BOUNCES_DEFAULT } from './sponsors.js';
 import { chat as jarvisChat, isEnabled as jarvisEnabled } from './jarvis.js';
 import { isEnabled as ttsEnabled, streamTTS } from './tts.js';
+import { sendEmail, checkBlocked, getSentLog, ccAddress } from './email.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 3001;
@@ -57,7 +64,11 @@ app.get('/api/auth/status', async (_req, res) => {
     return res.json({ connected: false, configured: false, hint: 'Set GOOGLE_CLIENT_ID/SECRET in .env' });
   }
   const status = await getStatus();
-  res.json({ ...status, configured: true });
+  const store = await loadStore();
+  const scopes = grantedScopeKeys(store.tokens);
+  const canSend = scopes.includes('gmail.send');
+  const missingScopes = REQUIRED_SCOPE_KEYS.filter((s) => !scopes.includes(s));
+  res.json({ ...status, configured: true, scopes, canSend, missingScopes, ccAddress: ccAddress() });
 });
 
 app.get('/auth/google', (_req, res) => {
@@ -125,12 +136,37 @@ app.post('/api/sponsors/:id/followup', async (req, res) => {
 app.post('/api/jarvis/chat', async (req, res) => {
   const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
   try {
-    const text = await jarvisChat(messages);
-    res.json({ text, model: jarvisEnabled() ? 'claude-sonnet-4-5' : 'simulated' });
+    const { text, draft } = await jarvisChat(messages);
+    res.json({ text, draft, model: jarvisEnabled() ? 'claude-sonnet-4-5' : 'simulated' });
   } catch (err) {
     console.error('JARVIS chat failed:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+/* ---------- jarvis send (approved draft) ---------- */
+app.post('/api/jarvis/send', async (req, res) => {
+  try {
+    const { to, subject, body, threadId } = req.body || {};
+    const entry = await sendEmail({ to, subject, body, threadId });
+    res.json({ ok: true, entry, cc: ccAddress() });
+  } catch (err) {
+    console.error('Send failed:', err);
+    const status = err.code === 'BLOCKED' ? 403 : 500;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+/* Dry-run: lets the frontend show "would be blocked" before user clicks send. */
+app.post('/api/jarvis/check', (req, res) => {
+  const { to, subject, body } = req.body || {};
+  const blocked = checkBlocked({ to, cc: ccAddress(), subject, body });
+  res.json({ blocked: !!blocked, reason: blocked, cc: ccAddress() });
+});
+
+/* ---------- sent log ---------- */
+app.get('/api/email/log', async (_req, res) => {
+  res.json({ entries: await getSentLog() });
 });
 
 /* ---------- jarvis voice (ElevenLabs) ---------- */

@@ -7,9 +7,18 @@ import { loadStore, setTokens, setUser } from './store.js';
 
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
+  'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/userinfo.email',
   'https://www.googleapis.com/auth/userinfo.profile',
 ];
+
+export const REQUIRED_SCOPE_KEYS = ['gmail.readonly', 'gmail.send'];
+
+/* Returns the granted scope keys (last URL segments) from the stored tokens. */
+export function grantedScopeKeys(tokens) {
+  if (!tokens?.scope) return [];
+  return tokens.scope.split(/\s+/).map((s) => s.split('/').pop());
+}
 
 export function isConfigured() {
   return Boolean(

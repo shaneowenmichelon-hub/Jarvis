@@ -23,5 +23,8 @@ export const api = {
   patchSponsor:  (id, patch)    => req(`/api/sponsors/${id}`, { method: 'POST', body: JSON.stringify(patch) }),
   markFollowup:  (id)           => req(`/api/sponsors/${id}/followup`, { method: 'POST' }),
   jarvis:        (messages)     => req('/api/jarvis/chat', { method: 'POST', body: JSON.stringify({ messages }) }),
+  sendDraft:     (draft)        => req('/api/jarvis/send', { method: 'POST', body: JSON.stringify(draft) }),
+  checkDraft:    (draft)        => req('/api/jarvis/check', { method: 'POST', body: JSON.stringify(draft) }),
+  sentLog:       ()             => req('/api/email/log'),
   setBounces:    (value)        => req('/api/meta/hard-bounces', { method: 'POST', body: JSON.stringify({ value }) }),
 };

@@ -5,6 +5,7 @@ import {
   ChevronRight, Calendar, Inbox, MailX, Flame,
   Power, Wifi, Lock, Eye, MessageSquare, ArrowUpRight, Sparkles,
   RefreshCw, LogOut, Link2, AlertCircle, Mic, MicOff, Volume2, VolumeX,
+  ShieldCheck, Edit3, Trash2,
 } from 'lucide-react';
 import { api } from './api.js';
 
@@ -172,6 +173,9 @@ export default function App() {
 
       {!authStatus.configured && <SetupBanner />}
       {authStatus.configured && !authStatus.connected && <ConnectBanner onConnect={connectGmail} />}
+      {authStatus.connected && authStatus.canSend === false && (
+        <ReauthBanner onReauth={connectGmail} />
+      )}
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
       <div style={styles.mainGrid}>
@@ -242,6 +246,20 @@ function ConnectBanner({ onConnect }) {
       </div>
       <button onClick={onConnect} style={{ ...styles.actionBtn, color: COLORS.cyan, borderColor: COLORS.cyan }}>
         <Link2 size={11} /> CONNECT GMAIL
+      </button>
+    </div>
+  );
+}
+
+function ReauthBanner({ onReauth }) {
+  return (
+    <div style={{ ...styles.banner, borderColor: COLORS.orangeDim, color: COLORS.orange }}>
+      <ShieldCheck size={14} />
+      <div style={{ flex: 1 }}>
+        <strong>SEND PERMISSION NEEDED.</strong> Re-authorize Gmail to let JARVIS send drafts on your approval.
+      </div>
+      <button onClick={onReauth} style={{ ...styles.actionBtn, color: COLORS.orange, borderColor: COLORS.orange }}>
+        <ShieldCheck size={11} /> RE-AUTHORIZE
       </button>
     </div>
   );
@@ -882,6 +900,108 @@ function useDictation(onResult) {
 }
 
 /* ============================================================
+   DRAFT CARD — review JARVIS's email draft, approve to send
+   ============================================================ */
+function DraftCard({ draft, onUpdate, onSent, onDiscard }) {
+  const [editing, setEditing] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState(null);
+  const [sentEntry, setSentEntry] = useState(null);
+
+  const handleField = (k) => (e) => onUpdate({ ...draft, [k]: e.target.value });
+
+  const send = async () => {
+    setSending(true);
+    setError(null);
+    try {
+      const res = await api.sendDraft({
+        to: draft.to,
+        subject: draft.subject,
+        body: draft.body,
+        threadId: draft.threadId || undefined,
+      });
+      setSentEntry(res.entry);
+      setTimeout(() => onSent(res.entry), 1200);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (sentEntry) {
+    return (
+      <div style={{ ...styles.draftCard, borderColor: COLORS.greenDim }}>
+        <div style={{ ...styles.draftHeader, color: COLORS.green }}>
+          <CheckCircle2 size={11} /> SENT · {sentEntry.to}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.draftCard}>
+      <div style={styles.draftHeader}>
+        <span><Edit3 size={11} /> DRAFT · awaiting approval</span>
+        {draft.reason && <span style={styles.draftReason}>{draft.reason}</span>}
+      </div>
+
+      <DraftField label="TO" value={draft.to} editing={editing} onChange={handleField('to')} />
+      <DraftField label="CC" value="zach@zmmevents.com (enforced)" editing={false} muted />
+      <DraftField label="SUBJECT" value={draft.subject} editing={editing} onChange={handleField('subject')} />
+      <DraftField label="BODY" value={draft.body} editing={editing} onChange={handleField('body')} multiline />
+
+      {error && (
+        <div style={styles.draftError}>
+          <AlertTriangle size={11} /> {error}
+        </div>
+      )}
+
+      <div style={styles.draftActions}>
+        <button
+          onClick={send}
+          disabled={sending}
+          style={{ ...styles.actionBtn, color: COLORS.bg, background: COLORS.green, borderColor: COLORS.green }}
+        >
+          <Send size={11} /> {sending ? 'SENDING…' : 'SEND'}
+        </button>
+        <button
+          onClick={() => setEditing((e) => !e)}
+          style={{ ...styles.actionBtn, color: COLORS.cyan, borderColor: COLORS.cyanDim }}
+        >
+          <Edit3 size={11} /> {editing ? 'DONE' : 'EDIT'}
+        </button>
+        <button
+          onClick={onDiscard}
+          style={{ ...styles.actionBtn, color: COLORS.red, borderColor: COLORS.redDim }}
+        >
+          <Trash2 size={11} /> DISCARD
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DraftField({ label, value, editing, onChange, multiline, muted }) {
+  return (
+    <div style={styles.draftField}>
+      <div style={styles.draftFieldLabel}>{label}</div>
+      {editing && !muted ? (
+        multiline ? (
+          <textarea value={value} onChange={onChange} rows={8} style={styles.draftInput} />
+        ) : (
+          <input value={value} onChange={onChange} style={styles.draftInput} />
+        )
+      ) : (
+        <div style={{ ...styles.draftFieldValue, color: muted ? COLORS.textDim : COLORS.text, whiteSpace: 'pre-wrap' }}>
+          {value}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
    JARVIS CHAT
    ============================================================ */
 function JarvisPanel({ open, setOpen, sponsor, stats }) {
@@ -924,7 +1044,7 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
     setThinking(true);
     try {
       const res = await api.jarvis(next);
-      setMessages([...next, { role: 'jarvis', content: res.text }]);
+      setMessages([...next, { role: 'jarvis', content: res.text, draft: res.draft || null }]);
       setModel(res.model);
       if (voiceOn) speak(res.text);
     } catch (err) {
@@ -934,6 +1054,17 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
     } finally {
       setThinking(false);
     }
+  };
+
+  const updateMessageDraft = (idx, draft) => {
+    setMessages((prev) => prev.map((m, i) => (i === idx ? { ...m, draft } : m)));
+  };
+  const clearMessageDraft = (idx, replacementText) => {
+    setMessages((prev) =>
+      prev.map((m, i) =>
+        i === idx ? { ...m, draft: null, content: replacementText ?? m.content } : m,
+      ),
+    );
   };
 
   const dictation = useDictation((text) => {
@@ -989,7 +1120,22 @@ function JarvisPanel({ open, setOpen, sponsor, stats }) {
         <>
           <div ref={scrollRef} style={styles.chatLog}>
             {messages.map((m, i) => (
-              <ChatBubble key={i} role={m.role} text={m.content} />
+              <React.Fragment key={i}>
+                <ChatBubble role={m.role} text={m.content} />
+                {m.draft && (
+                  <DraftCard
+                    draft={m.draft}
+                    onUpdate={(d) => updateMessageDraft(i, d)}
+                    onSent={(entry) =>
+                      clearMessageDraft(
+                        i,
+                        `Sent to ${entry.to}. CC: ${entry.cc}. ${m.content}`,
+                      )
+                    }
+                    onDiscard={() => clearMessageDraft(i, `${m.content}\n(draft discarded)`)}
+                  />
+                )}
+              </React.Fragment>
             ))}
             {thinking && <ChatBubble role="jarvis" text="…" />}
             {dictation.listening && (
@@ -1240,6 +1386,16 @@ const styles = {
   chatSend: { background: COLORS.cyan, color: COLORS.bg, border: 'none', padding: '0 12px', display: 'flex', alignItems: 'center', borderRadius: 2 },
   micBtn: { border: '1px solid', padding: '0 11px', display: 'flex', alignItems: 'center', borderRadius: 2, transition: 'all 0.15s' },
   micPulse: { width: 8, height: 8, borderRadius: '50%', display: 'inline-block', animation: 'pulse 1s infinite' },
+
+  draftCard: { alignSelf: 'stretch', border: `1px solid ${COLORS.orangeDim}`, borderRadius: 2, padding: 10, background: 'rgba(255, 154, 60, 0.05)', display: 'flex', flexDirection: 'column', gap: 6, marginTop: -2 },
+  draftHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 8, letterSpacing: '0.2em', color: COLORS.orange, gap: 8 },
+  draftReason: { fontSize: 8, color: COLORS.textDim, letterSpacing: '0.06em', textTransform: 'none', textAlign: 'right' },
+  draftField: { display: 'flex', flexDirection: 'column', gap: 2 },
+  draftFieldLabel: { fontSize: 7, color: COLORS.textDim, letterSpacing: '0.22em' },
+  draftFieldValue: { fontSize: 11, lineHeight: 1.5 },
+  draftInput: { background: 'rgba(0,0,0,0.4)', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.text, fontFamily: FONT_MONO, fontSize: 11, padding: '6px 8px', outline: 'none', borderRadius: 2, resize: 'vertical' },
+  draftError: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 10, color: COLORS.red, padding: '4px 0' },
+  draftActions: { display: 'flex', gap: 6, marginTop: 4 },
   chatHint: { display: 'flex', alignItems: 'center', gap: 5, fontSize: 8, color: COLORS.textDim, letterSpacing: '0.14em', marginTop: 8 },
   collapseBtn: { background: 'transparent', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.cyan, width: 20, height: 20, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 2, fontSize: 14, lineHeight: 1 },
 };
