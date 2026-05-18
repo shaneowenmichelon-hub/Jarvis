@@ -17,7 +17,7 @@ import {
   REQUIRED_SCOPE_KEYS,
 } from './auth.js';
 import { getStatus, syncAllSponsors, getEnrichedSponsors } from './gmail.js';
-import { loadStore, clearTokens, setOverride, setHardBounces } from './store.js';
+import { loadStore, clearTokens, setOverride, setHardBounces, storageBackend } from './store.js';
 import { HARD_RULES, EVENTS, HARD_BOUNCES_DEFAULT } from './sponsors.js';
 import { chat as jarvisChat, isEnabled as jarvisEnabled } from './jarvis.js';
 import { isEnabled as ttsEnabled, streamTTS } from './tts.js';
@@ -38,6 +38,7 @@ app.get('/api/health', (_req, res) => {
     oauth_configured: oauthConfigured(),
     jarvis_enabled: jarvisEnabled(),
     tts_premium: ttsEnabled(),
+    storage: storageBackend(),
   });
 });
 
@@ -204,5 +205,6 @@ app.listen(PORT, () => {
   console.log(`\n  ZMM // SPONSOR COMMAND backend [${mode}]`);
   console.log(`  Listening on http://localhost:${PORT}`);
   console.log(`  OAuth configured: ${oauthConfigured() ? 'yes' : 'no — set GOOGLE_CLIENT_ID/SECRET in .env'}`);
-  console.log(`  JARVIS live mode: ${jarvisEnabled() ? 'yes' : 'no — set ANTHROPIC_API_KEY in .env'}\n`);
+  console.log(`  JARVIS live mode: ${jarvisEnabled() ? 'yes' : 'no — set ANTHROPIC_API_KEY in .env'}`);
+  console.log(`  Storage backend:  ${storageBackend()}${storageBackend() === 'file' ? ' (EPHEMERAL on Render free tier — set DATABASE_URL for persistence)' : ''}\n`);
 });
