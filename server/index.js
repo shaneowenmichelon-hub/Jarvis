@@ -199,8 +199,8 @@ app.get('/api/sync/status', (_req, res) => {
 app.post('/api/jarvis/chat', async (req, res) => {
   const messages = Array.isArray(req.body?.messages) ? req.body.messages : [];
   try {
-    const { text, draft } = await jarvisChat(messages);
-    res.json({ text, draft, model: jarvisEnabled() ? 'claude-sonnet-4-5' : 'simulated' });
+    const { text, draft, actions } = await jarvisChat(messages);
+    res.json({ text, draft, actions: actions || [], model: jarvisEnabled() ? 'claude-sonnet-4-5' : 'simulated' });
   } catch (err) {
     console.error('JARVIS chat failed:', err);
     res.status(500).json({ error: err.message });

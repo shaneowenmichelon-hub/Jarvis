@@ -151,7 +151,15 @@ export async function getEnrichedSponsors() {
     const override = store.overrides[sponsor.id] || {};
     const merged = { ...sponsor, ...override };
     const thread = store.threadState[sponsor.id];
-    const lastOutbound = thread?.lastOutbound ?? null;
+    // Manual "MARK FOLLOWED UP" override takes precedence if it's newer
+    // than what Gmail last reported. That way the dashboard updates
+    // immediately even before the next sync confirms the send.
+    const gmailLastOutbound = thread?.lastOutbound ?? null;
+    const manualLastOutbound = override._manualLastOutbound ?? null;
+    const lastOutbound =
+      manualLastOutbound && (!gmailLastOutbound || new Date(manualLastOutbound) > new Date(gmailLastOutbound))
+        ? manualLastOutbound
+        : gmailLastOutbound;
     const lastInbound = thread?.lastInbound ?? null;
     const threadCount = thread?.threadCount ?? 0;
     const threads = thread?.threads ?? [];

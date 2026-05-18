@@ -285,6 +285,8 @@ export default function App() {
             stats={stats}
             accounts={authStatus.accounts || []}
             primaryAccount={authStatus.primaryAccount}
+            onPipelineChanged={() => loadAll()}
+            onDeepSyncStarted={() => setDeepSync({ running: true, progress: null, lastResult: null, lastDeepSync: deepSync.lastDeepSync })}
           />
         </div>
       </div>
@@ -1256,7 +1258,7 @@ function DraftField({ label, value, editing, onChange, multiline, muted }) {
 /* ============================================================
    JARVIS CHAT
    ============================================================ */
-function JarvisPanel({ open, setOpen, sponsor, stats, accounts = [], primaryAccount = null }) {
+function JarvisPanel({ open, setOpen, sponsor, stats, accounts = [], primaryAccount = null, onPipelineChanged, onDeepSyncStarted }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [thinking, setThinking] = useState(false);
@@ -1296,9 +1298,18 @@ function JarvisPanel({ open, setOpen, sponsor, stats, accounts = [], primaryAcco
     setThinking(true);
     try {
       const res = await api.jarvis(next);
-      setMessages([...next, { role: 'jarvis', content: res.text, draft: res.draft || null }]);
+      setMessages([...next, { role: 'jarvis', content: res.text, draft: res.draft || null, actions: res.actions || [] }]);
       setModel(res.model);
       if (voiceOn) speak(res.text);
+      // If JARVIS changed the pipeline (anything other than the
+      // approval-only draft_email), reload sponsors so the dashboard
+      // mirrors the new state immediately.
+      const stateChanging = (res.actions || []).filter((a) =>
+        ['update_sponsor', 'mark_followup', 'sync_pipeline'].includes(a.name)
+      );
+      if (stateChanging.length && onPipelineChanged) onPipelineChanged();
+      const startedDeep = (res.actions || []).some((a) => a.name === 'deep_sync_pipeline' && a.result?.started);
+      if (startedDeep && onDeepSyncStarted) onDeepSyncStarted();
     } catch (err) {
       const errMsg = `Comm error: ${err.message}`;
       setMessages([...next, { role: 'jarvis', content: errMsg }]);
@@ -1374,6 +1385,7 @@ function JarvisPanel({ open, setOpen, sponsor, stats, accounts = [], primaryAcco
             {messages.map((m, i) => (
               <React.Fragment key={i}>
                 <ChatBubble role={m.role} text={m.content} />
+                {m.actions && m.actions.length > 0 && <ActionsTrail actions={m.actions} />}
                 {m.draft && (
                   <DraftCard
                     draft={m.draft}
@@ -1445,6 +1457,37 @@ function JarvisPanel({ open, setOpen, sponsor, stats, accounts = [], primaryAcco
         </>
       )}
     </Panel>
+  );
+}
+
+/* Tiny inline log under a JARVIS message showing what tools fired. */
+function ActionsTrail({ actions }) {
+  const describe = (a) => {
+    const r = a.result || {};
+    if (!r.ok) return `${a.name}: ${r.error || 'failed'}`;
+    switch (a.name) {
+      case 'update_sponsor': {
+        const fields = Object.entries(r.applied || {}).map(([k, v]) => `${k}=${v}`).join(', ');
+        return `Updated ${r.sponsor_name || a.input.sponsor_id}${fields ? ` (${fields})` : ''}`;
+      }
+      case 'mark_followup':
+        return `Stamped ${r.sponsor_name || a.input.sponsor_id} followed up`;
+      case 'sync_pipeline':
+        return 'Pipeline synced';
+      case 'deep_sync_pipeline':
+        return r.started ? 'Deep sync started (running ~1 min)' : 'Deep sync already running';
+      default:
+        return a.name;
+    }
+  };
+  return (
+    <div style={styles.actionsTrail}>
+      {actions.map((a, i) => (
+        <div key={i} style={{ ...styles.actionsTrailRow, color: a.result?.ok ? COLORS.green : COLORS.red }}>
+          <CheckCircle2 size={9} /> <span>{describe(a)}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -1635,6 +1678,8 @@ const styles = {
   chatBubble: { maxWidth: '92%' },
   chatBubbleLabel: { fontSize: 8, color: COLORS.textDim, letterSpacing: '0.18em', marginBottom: 3 },
   chatBubbleText: { fontSize: 11, lineHeight: 1.5, border: '1px solid', borderRadius: 2, padding: '7px 10px', background: 'rgba(0,0,0,0.3)' },
+  actionsTrail: { display: 'flex', flexDirection: 'column', gap: 3, paddingLeft: 6, marginTop: -2, marginBottom: 4 },
+  actionsTrailRow: { display: 'flex', alignItems: 'center', gap: 6, fontSize: 9.5, letterSpacing: '0.04em', fontStyle: 'italic' },
   chatInputRow: { display: 'flex', gap: 6 },
   chatInput: { flex: 1, background: 'rgba(0,0,0,0.3)', border: `1px solid ${COLORS.cyanDim}`, color: COLORS.text, fontFamily: FONT_MONO, fontSize: 11, padding: '7px 10px', outline: 'none', borderRadius: 2 },
   chatSend: { background: COLORS.cyan, color: COLORS.bg, border: 'none', padding: '0 12px', display: 'flex', alignItems: 'center', borderRadius: 2 },
