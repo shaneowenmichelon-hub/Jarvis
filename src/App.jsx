@@ -792,7 +792,12 @@ function PipelineRow({ sponsor, selected, onSelect, now }) {
       <div style={{ ...styles.rowStageBar, background: meta.color }} />
       <div style={styles.rowMain}>
         <div style={styles.rowTop}>
-          <div style={styles.rowName}>{sponsor.name}</div>
+          <div style={styles.rowName}>
+            {sponsor.name}
+            {sponsor._autoDiscovered && (
+              <span style={styles.autoBadge} title="Auto-discovered from inbox">AUTO</span>
+            )}
+          </div>
           <div style={{ ...styles.rowStage, color: meta.color, borderColor: meta.color + '55' }}>{meta.label}</div>
         </div>
         <div style={styles.rowMeta}>
@@ -860,9 +865,13 @@ function DetailPanel({ sponsor, onMark, now }) {
       icon={Eye}
       right={<div style={{ ...styles.detailStage, color: meta.color, borderColor: meta.color + '55' }}>{meta.label}</div>}
     >
-      <div style={styles.detailName}>{sponsor.name}</div>
+      <div style={styles.detailName}>
+        {sponsor.name}
+        {sponsor._autoDiscovered && <span style={{ ...styles.autoBadge, marginLeft: 10, verticalAlign: 'middle' }}>AUTO</span>}
+      </div>
       <div style={styles.detailContact}>
         <Mail size={11} color={COLORS.cyan} /> {sponsor.contact || '—'}
+        {sponsor.displayName && <span style={{ color: COLORS.textDim, marginLeft: 6 }}>· {sponsor.displayName}</span>}
       </div>
 
       <div style={styles.detailGrid}>
@@ -1305,7 +1314,7 @@ function JarvisPanel({ open, setOpen, sponsor, stats, accounts = [], primaryAcco
       // approval-only draft_email), reload sponsors so the dashboard
       // mirrors the new state immediately.
       const stateChanging = (res.actions || []).filter((a) =>
-        ['update_sponsor', 'mark_followup', 'sync_pipeline'].includes(a.name)
+        ['update_sponsor', 'mark_followup', 'sync_pipeline', 'dismiss_discovered'].includes(a.name)
       );
       if (stateChanging.length && onPipelineChanged) onPipelineChanged();
       const startedDeep = (res.actions || []).some((a) => a.name === 'deep_sync_pipeline' && a.result?.started);
@@ -1476,6 +1485,8 @@ function ActionsTrail({ actions }) {
         return 'Pipeline synced';
       case 'deep_sync_pipeline':
         return r.started ? 'Deep sync started (running ~1 min)' : 'Deep sync already running';
+      case 'dismiss_discovered':
+        return `Dismissed ${a.input.email}`;
       default:
         return a.name;
     }
@@ -1654,6 +1665,7 @@ const styles = {
   rowName: { fontSize: 13, fontWeight: 600, color: COLORS.text, letterSpacing: '0.02em' },
   rowStage: { border: '1px solid', padding: '2px 7px', fontSize: 8, letterSpacing: '0.18em', borderRadius: 2 },
   rowMeta: { display: 'flex', gap: 10, fontSize: 9.5, letterSpacing: '0.06em', alignItems: 'center', marginTop: 2 },
+  autoBadge: { fontSize: 7, color: COLORS.cyan, border: `1px solid ${COLORS.cyanDim}`, padding: '1px 4px', letterSpacing: '0.2em', borderRadius: 2, marginLeft: 6 },
 
   bounceRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
   bounceLabel: { fontSize: 9, color: COLORS.red, letterSpacing: '0.2em' },

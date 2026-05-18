@@ -13,7 +13,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { getEnrichedSponsors, syncAllSponsors, startDeepSync } from './gmail.js';
 import { HARD_RULES, SPONSORS } from './sponsors.js';
 import { ccAddress } from './email.js';
-import { setOverride } from './store.js';
+import { setOverride, dismissDiscovered, loadStore } from './store.js';
 
 const MODEL = 'claude-sonnet-4-5';
 
@@ -105,6 +105,18 @@ const TOOLS = [
     name: 'deep_sync_pipeline',
     description: 'Run a full historical scan across every connected inbox (~1 min, async). Use when Shane asks for a complete rescan or full history rebuild.',
     input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'dismiss_discovered',
+    description:
+      'Hide an auto-discovered contact from the pipeline. Use when Shane says the contact is not a real sponsor lead (e.g. a vendor, friend, or noise address that slipped through the filters).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        email: { type: 'string', description: 'The email address to dismiss.' },
+      },
+      required: ['email'],
+    },
   },
 ];
 
@@ -241,6 +253,11 @@ async function executeTool(name, input) {
       const result = startDeepSync();
       return { ok: true, started: result.started, message: result.started ? 'Deep sync running in background (~1 minute).' : 'A deep sync is already in progress.' };
     }
+    case 'dismiss_discovered': {
+      const { email } = input;
+      await dismissDiscovered(email);
+      return { ok: true, email };
+    }
     default:
       return { ok: false, error: `Unknown tool: ${name}` };
   }
@@ -257,6 +274,7 @@ function buildPipelineSummary(sponsors) {
       const recentThread = s.threadIds?.[0];
       lines.push(
         `  - ${s.name} [id=${s.id}] (${s.event}, tier ${s.tier}) — status=${s.status}` +
+        (s._autoDiscovered ? ' [AUTO]' : '') +
         (s.contact ? `, contact=${s.contact}` : '') +
         (s.value ? `, $${s.value}` : '') +
         (s.lastOutbound ? `, last_out=${s.lastOutbound.slice(0, 10)}` : '') +

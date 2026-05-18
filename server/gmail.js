@@ -9,16 +9,53 @@
 
 import { google } from 'googleapis';
 import { getAllAuthorizedClients } from './auth.js';
-import { loadStore, setThreadState } from './store.js';
+import { loadStore, setThreadState, bulkUpsertDiscovered } from './store.js';
 import { SPONSORS, computeFollowUp } from './sponsors.js';
+import { discoverContacts, deriveCompanyName } from './discovery.js';
 
 const MAX_THREADS_PER_SPONSOR = 5;
 const DEEP_MAX_THREADS_PER_SPONSOR = 50;  // upper bound to keep total scan time bounded
 const DEEP_PAGE_SIZE = 25;
 const MIN_INTERVAL_MS = (Number(process.env.SYNC_MIN_INTERVAL) || 30) * 1000;
+// Discovery scan is more expensive than a per-sponsor sync, so we
+// only re-run it every DISCOVERY_INTERVAL_MS rather than on every tick.
+const DISCOVERY_INTERVAL_MS = 5 * 60 * 1000;
 
 let lastSyncAt = 0;
+let lastDiscoveryAt = 0;
 let inFlight = null;
+
+/* Build a flat list of every contact the pipeline knows about — the
+   curated SPONSORS entries plus auto-discovered contacts. Discovered
+   ones get a "discovered:<email>" id so they're addressable from JARVIS
+   tool calls and override storage. */
+function discoveredToSponsor(d, override = {}) {
+  const base = {
+    id: `discovered:${d.email}`,
+    name: d.name || deriveCompanyName(d.email),
+    stage: 'COLD',
+    tier: 'B',
+    value: 0,
+    event: '—',
+    contact: d.email,
+    status: 'COLD',
+    notes: d.displayName ? `Auto-discovered (${d.displayName}).` : 'Auto-discovered from inbox.',
+    _autoDiscovered: true,
+    displayName: d.displayName || null,
+    discoveredAt: d.addedAt,
+    firstSeenVia: d.firstSeenVia || null,
+  };
+  return { ...base, ...override };
+}
+
+async function getAllTrackedContacts() {
+  const store = await loadStore();
+  const fromConfig = SPONSORS.filter((s) => s.contact).map((s) => ({ source: 'curated', sponsor: s }));
+  const fromDiscovered = Object.values(store.discovered || {})
+    .filter((d) => !d.dismissed)
+    .map((d) => ({ source: 'discovered', sponsor: discoveredToSponsor(d, store.overrides[`discovered:${d.email}`]) }));
+  return [...fromConfig, ...fromDiscovered];
+}
 
 /* Deep sync state. Lives in memory; lost on server restart, which is
    fine — the user just retriggers. Frontend polls /api/sync/status. */
@@ -66,10 +103,19 @@ export async function syncAllSponsors({ force = false } = {}) {
       }
 
       const ourEmails = clients.map((c) => c.email.toLowerCase());
+
+      // Auto-discover new contacts every DISCOVERY_INTERVAL_MS. Keeps regular
+      // sync ticks cheap while still picking up new sent-mail contacts ~5min later.
+      if (Date.now() - lastDiscoveryAt > DISCOVERY_INTERVAL_MS) {
+        await runDiscovery(clients, ourEmails, { days: 1 });
+        lastDiscoveryAt = Date.now();
+      }
+
+      const tracked = await getAllTrackedContacts();
       const store = await loadStore();
       const threadState = { ...store.threadState };
 
-      for (const sponsor of SPONSORS) {
+      for (const { sponsor } of tracked) {
         if (!sponsor.contact) continue;
         const merged = { lastOutbound: null, lastInbound: null, threads: [], threadCount: 0 };
         let lastOutTs = 0;
@@ -103,6 +149,22 @@ export async function syncAllSponsors({ force = false } = {}) {
 
   return inFlight;
 }
+
+async function runDiscovery(clients, ourEmails, options = {}) {
+  const knownContacts = [
+    ...SPONSORS.map((s) => s.contact).filter(Boolean),
+  ];
+  // discovered contacts are passed through too so we don't keep re-adding them
+  const store = await loadStore();
+  for (const d of Object.values(store.discovered || {})) knownContacts.push(d.email);
+
+  const found = await discoverContacts(clients, ourEmails, knownContacts, options);
+  if (found.size === 0) return { added: 0 };
+  await bulkUpsertDiscovered(found);
+  return { added: found.size };
+}
+
+export { runDiscovery };
 
 async function syncSponsorForAccount(client, sponsor, ourEmails) {
   const gmail = google.gmail({ version: 'v1', auth: client });
@@ -147,7 +209,8 @@ async function syncSponsorForAccount(client, sponsor, ourEmails) {
    thread state into the shape the frontend renders. */
 export async function getEnrichedSponsors() {
   const store = await loadStore();
-  return SPONSORS.map((sponsor) => {
+  const tracked = await getAllTrackedContacts();
+  return tracked.map(({ sponsor }) => {
     const override = store.overrides[sponsor.id] || {};
     const merged = { ...sponsor, ...override };
     const thread = store.threadState[sponsor.id];
@@ -210,7 +273,14 @@ async function runDeepSync() {
     }
 
     const ourEmails = clients.map((c) => c.email.toLowerCase());
-    const sponsorsWithContact = SPONSORS.filter((s) => s.contact);
+
+    // Deep discovery first: 90-day window, captures contacts the regular
+    // 1-day discovery cycle has never seen.
+    await runDiscovery(clients, ourEmails, { days: 90, maxThreads: 300 });
+    lastDiscoveryAt = Date.now();
+
+    const tracked = await getAllTrackedContacts();
+    const sponsorsWithContact = tracked.map((t) => t.sponsor).filter((s) => s.contact);
     deepSyncState.progress.totalSponsors = sponsorsWithContact.length;
     deepSyncState.progress.accounts = clients.length;
 

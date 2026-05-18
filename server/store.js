@@ -23,6 +23,10 @@ const DEFAULT = {
   overrides: {},
   hardBounces: null,
   sentLog: [],
+  /* Auto-discovered contacts (keyed by lowercase email). Each entry:
+     { email, name, displayName, addedAt, lastSeen, firstSeenVia, dismissed } */
+  discovered: {},
+  lastDiscoveryAt: null,
 };
 
 const USE_PG = Boolean(process.env.DATABASE_URL);
@@ -191,4 +195,55 @@ export async function setOverride(sponsorId, patch) {
 
 export function storageBackend() {
   return USE_PG ? 'postgres' : 'file';
+}
+
+/* ---- discovered contacts ---- */
+
+export async function upsertDiscovered(contact) {
+  if (!contact?.email) return cache;
+  await loadStore();
+  const email = contact.email.toLowerCase();
+  const existing = cache.discovered?.[email];
+  const merged = {
+    ...existing,
+    ...contact,
+    email,
+    addedAt: existing?.addedAt || contact.addedAt || new Date().toISOString(),
+    lastSeen: contact.lastSeen || new Date().toISOString(),
+  };
+  const discovered = { ...cache.discovered, [email]: merged };
+  return updateStore({ discovered });
+}
+
+export async function bulkUpsertDiscovered(contactsMap) {
+  await loadStore();
+  const discovered = { ...cache.discovered };
+  for (const [email, c] of contactsMap.entries()) {
+    const lo = email.toLowerCase();
+    const existing = discovered[lo];
+    discovered[lo] = {
+      ...existing,
+      ...c,
+      email: lo,
+      addedAt: existing?.addedAt || new Date().toISOString(),
+      lastSeen: new Date().toISOString(),
+    };
+  }
+  return updateStore({ discovered, lastDiscoveryAt: new Date().toISOString() });
+}
+
+export async function dismissDiscovered(email) {
+  await loadStore();
+  const lo = email.toLowerCase();
+  if (!cache.discovered?.[lo]) return cache;
+  const discovered = { ...cache.discovered, [lo]: { ...cache.discovered[lo], dismissed: true } };
+  return updateStore({ discovered });
+}
+
+export async function removeDiscovered(email) {
+  await loadStore();
+  const lo = email.toLowerCase();
+  const discovered = { ...cache.discovered };
+  delete discovered[lo];
+  return updateStore({ discovered });
 }

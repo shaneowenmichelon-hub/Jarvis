@@ -8,7 +8,9 @@
 
 import { google } from 'googleapis';
 import { getAuthorizedClientFor, getPrimaryClient } from './auth.js';
-import { loadStore, updateStore } from './store.js';
+import { loadStore, updateStore, upsertDiscovered } from './store.js';
+import { SPONSORS } from './sponsors.js';
+import { deriveCompanyName, parseAddresses, isNoise } from './discovery.js';
 
 const CC_ALWAYS = process.env.CC_ALWAYS || 'zach@zmmevents.com';
 
@@ -97,6 +99,25 @@ async function appendLog(entry) {
   await updateStore({ sentLog: log });
 }
 
+/* Auto-register the recipient when we send/draft. Skips curated
+   sponsors (they're already tracked) and noise addresses. Means new
+   contacts appear in the pipeline within seconds of the send, instead
+   of waiting for the next 5-min discovery scan. */
+async function registerRecipient(toHeader, firstSeenVia) {
+  const recipients = parseAddresses(toHeader);
+  for (const r of recipients) {
+    if (!r.email || isNoise(r.email)) continue;
+    const isCurated = SPONSORS.some((s) => s.contact?.toLowerCase() === r.email);
+    if (isCurated) continue;
+    await upsertDiscovered({
+      email: r.email,
+      name: deriveCompanyName(r.email),
+      displayName: r.name || null,
+      firstSeenVia,
+    });
+  }
+}
+
 export async function sendEmail({ to, subject, body, threadId, accountEmail }) {
   const { gmail, raw, account } = await buildGmailMessage({ to, subject, body, accountEmail });
 
@@ -117,6 +138,7 @@ export async function sendEmail({ to, subject, body, threadId, accountEmail }) {
     sentAt: new Date().toISOString(),
   };
   await appendLog(entry);
+  await registerRecipient(to, account.email);
   return entry;
 }
 
@@ -141,6 +163,7 @@ export async function saveDraft({ to, subject, body, threadId, accountEmail }) {
     savedAt: new Date().toISOString(),
   };
   await appendLog(entry);
+  await registerRecipient(to, account.email);
   return entry;
 }
 
