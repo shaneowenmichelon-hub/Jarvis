@@ -29,7 +29,7 @@ import {
 import { HARD_RULES, EVENTS, HARD_BOUNCES_DEFAULT } from './sponsors.js';
 import { chat as jarvisChat, isEnabled as jarvisEnabled } from './jarvis.js';
 import { isEnabled as ttsEnabled, streamTTS } from './tts.js';
-import { sendEmail, saveDraft, checkBlocked, getSentLog, ccAddress } from './email.js';
+import { sendEmail, saveDraft, checkBlocked, getSentLog, ccAddress, buildQuickFollowUpMessage } from './email.js';
 import { getTodayStats } from './stats.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -216,6 +216,50 @@ app.post('/api/jarvis/send', async (req, res) => {
     res.json({ ok: true, entry, cc: ccAddress() });
   } catch (err) {
     console.error('Send failed:', err);
+    const status = err.code === 'BLOCKED' ? 403 : 500;
+    res.status(status).json({ error: err.message, code: err.code });
+  }
+});
+
+/* ---------- quick follow-up: build a personalized draft in the thread ----------
+   Used by the send icon in the follow-up queue. Server crafts the message
+   (deterministic template + name personalization), saves it as a Gmail
+   draft inside the existing thread, and returns the thread URL so the
+   client can open it. */
+app.post('/api/jarvis/quickfollowup', async (req, res) => {
+  try {
+    const { sponsorId } = req.body || {};
+    if (!sponsorId) return res.status(400).json({ error: 'sponsorId required' });
+
+    const sponsors = await getEnrichedSponsors();
+    const sponsor = sponsors.find((s) => s.id === sponsorId);
+    if (!sponsor) return res.status(404).json({ error: 'sponsor not found' });
+    if (!sponsor.contact) return res.status(400).json({ error: 'sponsor has no contact email' });
+
+    const message = buildQuickFollowUpMessage(sponsor);
+    const firstThread = sponsor.threads?.[0];
+    const threadId = firstThread?.threadId;
+    const accountEmail = firstThread?.account;
+
+    const entry = await saveDraft({
+      to: sponsor.contact,
+      subject: message.subject,
+      body: message.body,
+      threadId,
+      accountEmail,
+    });
+
+    const authParam = accountEmail
+      ? `?authuser=${encodeURIComponent(accountEmail)}`
+      : 'u/0/';
+    const base = `https://mail.google.com/mail/${authParam}`;
+    // If we have a thread the draft lives inside it; otherwise route the
+    // user to their Drafts folder where it landed as a new email.
+    const url = threadId ? `${base}#inbox/${threadId}` : `${base}#drafts`;
+
+    res.json({ ok: true, entry, url });
+  } catch (err) {
+    console.error('quick follow-up failed:', err);
     const status = err.code === 'BLOCKED' ? 403 : 500;
     res.status(status).json({ error: err.message, code: err.code });
   }

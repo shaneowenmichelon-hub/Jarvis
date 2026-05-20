@@ -175,3 +175,63 @@ export async function getSentLog() {
 export function ccAddress() {
   return CC_ALWAYS;
 }
+
+/* ============================================================
+   QUICK FOLLOW-UP — used by the send icon in the follow-up queue.
+   Builds a personalized "checking back" reply: pulls a first name
+   from the contact's display name or email local part (with sensible
+   fallbacks for generic addresses like partnerships@), inserts the
+   company name, and uses Shane's signature.
+   ============================================================ */
+
+const HONORIFICS = new Set(['mr', 'mr.', 'mrs', 'mrs.', 'ms', 'ms.', 'dr', 'dr.', 'prof', 'prof.']);
+
+const GENERIC_LOCAL_PARTS = new Set([
+  'team', 'partnerships', 'partnership', 'sponsorships', 'sponsorship',
+  'info', 'hello', 'hi', 'contact', 'support', 'sales', 'partner',
+  'sponsor', 'business', 'biz', 'media', 'press', 'brand', 'collab',
+  'campus', 'marketing', 'pr', 'help', 'admin', 'general',
+]);
+
+export function extractFirstName(sponsor) {
+  // Prefer the parsed display name from the email's From header.
+  if (sponsor.displayName) {
+    for (const word of sponsor.displayName.trim().split(/\s+/)) {
+      const clean = word.toLowerCase().replace(/[.,]/g, '');
+      if (HONORIFICS.has(clean)) continue;
+      if (/^[A-Za-z][A-Za-z'-]+$/.test(word) && word.length >= 2) {
+        return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+      }
+    }
+  }
+  // Fall back to the email local part if it looks like a name.
+  if (sponsor.contact) {
+    const local = sponsor.contact.split('@')[0].toLowerCase();
+    if (!GENERIC_LOCAL_PARTS.has(local)) {
+      const first = local.split(/[._-]/)[0];
+      if (first && /^[a-z]+$/.test(first) && first.length >= 2 && first.length <= 20 && !GENERIC_LOCAL_PARTS.has(first)) {
+        return first.charAt(0).toUpperCase() + first.slice(1);
+      }
+    }
+  }
+  return null;
+}
+
+export function buildQuickFollowUpMessage(sponsor) {
+  const firstName = extractFirstName(sponsor);
+  const greeting = firstName ? `Hey ${firstName},` : `Hey ${sponsor.name} team,`;
+  const company = sponsor.name;
+  const body = `${greeting}
+
+Just checking back here to see if you have any interest sponsoring live music events. Did you have a chance to look at the deck?
+
+If sponsorships/partnerships fall to another person at ${company}, could you forward me their contact? Sorry to bother.
+
+Best,
+Shane Michelon
+President, ZMM Events`;
+  return {
+    subject: `Quick check-in — ${company} × ZMM`,
+    body,
+  };
+}

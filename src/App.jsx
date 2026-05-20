@@ -274,7 +274,7 @@ export default function App() {
             overdue={stats.overdue}
             dueSoon={stats.dueSoon}
             onSelect={setSelectedId}
-            onMark={markFollowedUp}
+            onError={setError}
           />
           <RulesPanel rules={meta.hardRules} />
         </div>
@@ -700,11 +700,35 @@ function AccountsPanel({ authStatus, onAddAccount, onRemove, onSetPrimary, deepS
 /* ============================================================
    FOLLOW-UP PANEL
    ============================================================ */
-function FollowUpPanel({ overdue, dueSoon, onSelect, onMark }) {
+function FollowUpPanel({ overdue, dueSoon, onSelect, onError }) {
+  const [drafting, setDrafting] = useState(null);
   const items = [
     ...overdue.map((s) => ({ ...s, _flag: 'OVERDUE' })),
     ...dueSoon.map((s) => ({ ...s, _flag: 'DUE' })),
   ];
+
+  /* Click flow: open about:blank synchronously (so the browser still
+     treats it as a user-initiated nav and doesn't block the popup),
+     then call the API and redirect that new tab to the Gmail thread
+     once the draft is saved. */
+  const handleQuickFollowUp = async (sponsorId) => {
+    setDrafting(sponsorId);
+    const newWindow = window.open('about:blank', '_blank');
+    try {
+      const res = await api.quickFollowUp(sponsorId);
+      if (res.url && newWindow) {
+        newWindow.location.href = res.url;
+      } else if (newWindow) {
+        newWindow.close();
+      }
+    } catch (err) {
+      if (newWindow) newWindow.close();
+      if (onError) onError(err.message);
+    } finally {
+      setDrafting(null);
+    }
+  };
+
   return (
     <Panel
       title="FOLLOW-UP QUEUE"
@@ -752,29 +776,16 @@ function FollowUpPanel({ overdue, dueSoon, onSelect, onMark }) {
                   }}>
                     {isOverdue ? `${Math.abs(dayDelta)}D LATE` : dayDelta === 0 ? 'TODAY' : `${dayDelta}D`}
                   </div>
-                  {(() => {
-                    const url = gmailThreadUrl(s);
-                    return url ? (
-                      <a
-                        href={url}
-                        target="_blank"
-                        rel="noreferrer"
-                        onClick={(e) => e.stopPropagation()}
-                        style={{ ...styles.followBtn, textDecoration: 'none' }}
-                        title="Open thread in Gmail"
-                      >
-                        <Send size={11} />
-                      </a>
-                    ) : (
-                      <button
-                        disabled
-                        style={{ ...styles.followBtn, opacity: 0.3, cursor: 'not-allowed' }}
-                        title="No thread yet — sync first"
-                      >
-                        <Send size={11} />
-                      </button>
-                    );
-                  })()}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleQuickFollowUp(s.id); }}
+                    disabled={drafting === s.id}
+                    style={{ ...styles.followBtn, opacity: drafting === s.id ? 0.6 : 1 }}
+                    title={drafting === s.id ? 'Drafting…' : 'Draft a quick follow-up and open in Gmail'}
+                  >
+                    {drafting === s.id
+                      ? <RefreshCw size={11} style={{ animation: 'spin 1s linear infinite' }} />
+                      : <Send size={11} />}
+                  </button>
                 </div>
               </div>
             );
