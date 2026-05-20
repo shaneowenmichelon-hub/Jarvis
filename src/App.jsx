@@ -70,6 +70,7 @@ const RULE_ICONS = { cc: Mail, block: Shield, intro: Users };
 export default function App() {
   const [now, setNow] = useState(new Date());
   const [authStatus, setAuthStatus] = useState({ connected: false, configured: false, accounts: [], primaryAccount: null, lastSync: null });
+  const [health, setHealth] = useState({ storage: null });
   const [meta, setMeta] = useState({ hardRules: [], events: [], hardBounces: 0 });
   const [sponsors, setSponsors] = useState([]);
   const [activeStage, setActiveStage] = useState('ALL');
@@ -115,6 +116,12 @@ export default function App() {
       setSyncing(false);
     }
   }, [selectedId]);
+
+  /* Fetch /api/health once on mount — used to show the persistence
+     warning when storage is still the ephemeral file backend. */
+  useEffect(() => {
+    api.health().then(setHealth).catch(() => {});
+  }, []);
 
   useEffect(() => {
     loadAll();
@@ -249,6 +256,7 @@ export default function App() {
       {authStatus.connected && authStatus.canSend === false && (
         <ReauthBanner onReauth={connectGmail} />
       )}
+      {health.storage === 'file' && authStatus.connected && <EphemeralStorageBanner />}
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
       {toast && (
         <div style={{ ...styles.banner, borderColor: toast.tone === 'ok' ? COLORS.greenDim : COLORS.redDim, color: toast.tone === 'ok' ? COLORS.green : COLORS.red }}>
@@ -340,6 +348,20 @@ function ConnectBanner({ onConnect }) {
       <button onClick={onConnect} style={{ ...styles.actionBtn, color: COLORS.cyan, borderColor: COLORS.cyan }}>
         <Link2 size={11} /> CONNECT GMAIL
       </button>
+    </div>
+  );
+}
+
+function EphemeralStorageBanner() {
+  return (
+    <div style={{ ...styles.banner, borderColor: COLORS.yellow + '55', color: COLORS.yellow }}>
+      <AlertCircle size={14} />
+      <div style={{ flex: 1 }}>
+        <strong>EPHEMERAL STORAGE.</strong>{' '}
+        Your Gmail sign-ins will reset every time Render redeploys or idles. To make them
+        permanent, sign up at <a href="https://neon.tech" target="_blank" rel="noreferrer" style={{ color: COLORS.yellow, textDecoration: 'underline' }}>neon.tech</a>,
+        copy your connection string, and paste it as <code>DATABASE_URL</code> in Render's Environment tab.
+      </div>
     </div>
   );
 }
