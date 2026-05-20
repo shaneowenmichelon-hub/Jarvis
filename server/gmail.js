@@ -8,7 +8,7 @@
    Rate-limited so multiple callers within MIN_INTERVAL share one fetch. */
 
 import { google } from 'googleapis';
-import { getAllAuthorizedClients } from './auth.js';
+import { getAllAuthorizedClients, getAuthorizedClientFor } from './auth.js';
 import { loadStore, setThreadState, bulkUpsertDiscovered } from './store.js';
 import { SPONSORS, computeFollowUp } from './sponsors.js';
 import { discoverContacts, deriveCompanyName, DEFAULT_DISCOVERY_KEYWORDS } from './discovery.js';
@@ -165,6 +165,28 @@ async function runDiscovery(clients, ourEmails, options = {}) {
 }
 
 export { runDiscovery };
+
+/* Look up the most recent thread for a contact within a specific
+   account. Used when we need to draft from a primary account that
+   may not share thread IDs with the account that originally synced
+   the conversation (Gmail thread IDs are per-mailbox). */
+export async function findThreadIdForContact(accountEmail, contact) {
+  if (!accountEmail || !contact) return null;
+  const client = await getAuthorizedClientFor(accountEmail);
+  if (!client) return null;
+  try {
+    const gmail = google.gmail({ version: 'v1', auth: client });
+    const list = await gmail.users.threads.list({
+      userId: 'me',
+      q: `from:${contact} OR to:${contact}`,
+      maxResults: 1,
+    });
+    return list.data.threads?.[0]?.id || null;
+  } catch (err) {
+    console.error(`[lookup] thread for ${contact} in ${accountEmail} failed:`, err.message);
+    return null;
+  }
+}
 
 async function syncSponsorForAccount(client, sponsor, ourEmails) {
   const gmail = google.gmail({ version: 'v1', auth: client });

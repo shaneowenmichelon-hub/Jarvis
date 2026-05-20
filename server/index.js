@@ -16,7 +16,7 @@ import {
   grantedScopeKeys,
   REQUIRED_SCOPE_KEYS,
 } from './auth.js';
-import { getStatus, syncAllSponsors, getEnrichedSponsors, startDeepSync, getDeepSyncState } from './gmail.js';
+import { getStatus, syncAllSponsors, getEnrichedSponsors, startDeepSync, getDeepSyncState, findThreadIdForContact } from './gmail.js';
 import {
   loadStore,
   setOverride,
@@ -237,24 +237,27 @@ app.post('/api/jarvis/quickfollowup', async (req, res) => {
     if (!sponsor.contact) return res.status(400).json({ error: 'sponsor has no contact email' });
 
     const message = buildQuickFollowUpMessage(sponsor);
-    const firstThread = sponsor.threads?.[0];
-    const threadId = firstThread?.threadId;
-    const accountEmail = firstThread?.account;
+
+    // Always draft from the user's primary account. Look up the thread
+    // ID *inside that account's mailbox* because Gmail thread IDs are
+    // per-mailbox — the threadId we synced from another inbox can't be
+    // used here.
+    const store = await loadStore();
+    const primaryAccount = store.primaryAccount;
+    if (!primaryAccount) {
+      return res.status(400).json({ error: 'No primary Gmail account set. Connect Gmail and set a primary.' });
+    }
+    const threadId = await findThreadIdForContact(primaryAccount, sponsor.contact);
 
     const entry = await saveDraft({
       to: sponsor.contact,
       subject: message.subject,
       body: message.body,
       threadId,
-      accountEmail,
+      accountEmail: primaryAccount,
     });
 
-    const authParam = accountEmail
-      ? `?authuser=${encodeURIComponent(accountEmail)}`
-      : 'u/0/';
-    const base = `https://mail.google.com/mail/${authParam}`;
-    // If we have a thread the draft lives inside it; otherwise route the
-    // user to their Drafts folder where it landed as a new email.
+    const base = `https://mail.google.com/mail/?authuser=${encodeURIComponent(primaryAccount)}`;
     const url = threadId ? `${base}#inbox/${threadId}` : `${base}#drafts`;
 
     res.json({ ok: true, entry, url });
