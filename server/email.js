@@ -43,10 +43,10 @@ export function checkBlocked({ to, cc, subject, body }) {
 
 function buildMime({ to, cc, from, subject, body }) {
   const lines = [
-    `To: ${to}`,
-    cc ? `Cc: ${cc}` : null,
-    `From: ${from}`,
-    `Subject: ${subject}`,
+    `To: ${encodeAddressHeader(to)}`,
+    cc ? `Cc: ${encodeAddressHeader(cc)}` : null,
+    `From: ${encodeAddressHeader(from)}`,
+    `Subject: ${encodeHeaderValue(subject)}`,
     'MIME-Version: 1.0',
     'Content-Type: text/plain; charset=utf-8',
     '',
@@ -54,6 +54,28 @@ function buildMime({ to, cc, from, subject, body }) {
   ].filter(Boolean);
   const raw = lines.join('\r\n');
   return Buffer.from(raw, 'utf8').toString('base64url');
+}
+
+/* RFC 5322 says email headers must be 7-bit ASCII. To carry non-ASCII
+   content (em-dashes, accents, emoji, etc.) we wrap the value in an
+   RFC 2047 encoded-word so receiving clients decode it as UTF-8 instead
+   of guessing (and usually guessing wrong, producing mojibake like
+   "Ã—" for "×"). ASCII-only values pass through unchanged. */
+const ASCII_RE = /^[\x00-\x7f]*$/;
+
+function encodeHeaderValue(value) {
+  if (!value || ASCII_RE.test(value)) return value || '';
+  return `=?UTF-8?B?${Buffer.from(value, 'utf8').toString('base64')}?=`;
+}
+
+function encodeAddressHeader(addr) {
+  if (!addr) return '';
+  if (ASCII_RE.test(addr)) return addr;
+  // "Display Name <email@example.com>" — only the display name can be non-ASCII;
+  // the addr-spec itself is always ASCII per RFC 5321.
+  const m = addr.match(/^(.+?)\s*<(.+)>\s*$/);
+  if (m) return `${encodeHeaderValue(m[1])} <${m[2]}>`;
+  return encodeHeaderValue(addr);
 }
 
 /* Internal: build the Gmail-ready MIME + resolve from / hard-rule check.
@@ -231,7 +253,7 @@ Best,
 Shane Michelon
 President, ZMM Events`;
   return {
-    subject: `Quick check-in — ${company} × ZMM`,
+    subject: `Quick check-in - ${company} x ZMM`,
     body,
   };
 }
