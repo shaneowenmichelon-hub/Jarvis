@@ -51,6 +51,28 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+/* Quick diagnostic: shows the server's view of which accounts are
+   connected and which is primary, with no secrets. Useful when the
+   dashboard says one thing but the server is acting like another. */
+app.get('/api/auth/debug', async (_req, res) => {
+  const store = await loadStore();
+  const accounts = Object.entries(store.accounts || {}).map(([email, a]) => ({
+    email,
+    name: a.name || null,
+    addedAt: a.addedAt || null,
+    isPrimary: store.primaryAccount === email,
+    hasTokens: !!a.tokens,
+    hasRefreshToken: !!a.tokens?.refresh_token,
+    scopes: a.tokens?.scope ? a.tokens.scope.split(/\s+/).map((s) => s.split('/').pop()) : [],
+  }));
+  res.json({
+    storage: storageBackend(),
+    primaryAccount: store.primaryAccount || null,
+    accountCount: accounts.length,
+    accounts,
+  });
+});
+
 /* ---------- meta ---------- */
 app.get('/api/meta', async (_req, res) => {
   const store = await loadStore();

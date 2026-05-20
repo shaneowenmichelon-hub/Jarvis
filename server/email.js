@@ -86,15 +86,20 @@ function encodeAddressHeader(addr) {
 async function resolveAccount(accountEmail) {
   if (accountEmail) {
     const client = await getAuthorizedClientFor(accountEmail);
-    if (!client) throw new Error(`Account ${accountEmail} not connected.`);
+    if (!client) {
+      console.warn(`[email] requested account ${accountEmail} but it is not authorized in the store`);
+      throw new Error(`Account ${accountEmail} not connected.`);
+    }
     const store = await loadStore();
     const acct = store.accounts?.[accountEmail];
+    console.log(`[email] sending as explicit account=${accountEmail}`);
     return { email: accountEmail, name: acct?.name || accountEmail, client };
   }
   const primary = await getPrimaryClient();
   if (!primary) throw new Error('Gmail not connected. Click Connect Gmail to authorize.');
   const store = await loadStore();
   const acct = store.accounts?.[primary.email];
+  console.log(`[email] sending as primary account=${primary.email} (no explicit override)`);
   return { email: primary.email, name: acct?.name || primary.email, client: primary.client };
 }
 

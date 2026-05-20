@@ -191,8 +191,12 @@ export default function App() {
   };
 
   const setPrimaryAccount = async (email) => {
-    await api.setPrimary(email);
-    await loadAll();
+    try {
+      await api.setPrimary(email);
+      await loadAll();
+    } catch (err) {
+      setError(`Couldn't set ${email} as primary: ${err.message}`);
+    }
   };
 
   /* Deep sync: kick it off, then poll status until done. On completion,
