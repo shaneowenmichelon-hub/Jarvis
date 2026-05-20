@@ -257,8 +257,9 @@ app.post('/api/jarvis/quickfollowup', async (req, res) => {
       accountEmail: primaryAccount,
     });
 
-    const base = `https://mail.google.com/mail/?authuser=${encodeURIComponent(primaryAccount)}`;
+    const base = `https://mail.google.com/mail/u/0/?authuser=${encodeURIComponent(primaryAccount)}`;
     const url = threadId ? `${base}#inbox/${threadId}` : `${base}#drafts`;
+    console.log(`[quickfollowup] account=${primaryAccount} contact=${sponsor.contact} threadId=${threadId || 'NONE'} url=${url}`);
 
     res.json({ ok: true, entry, url });
   } catch (err) {
