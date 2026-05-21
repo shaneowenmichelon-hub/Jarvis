@@ -1241,17 +1241,12 @@ function DraftCard({ draft, accounts = [], defaultAccount, onUpdate, onSent, onD
   const [working, setWorking] = useState(null); // 'send' | 'draft' | null
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null); // { type: 'sent'|'draft', entry }
-  // Account selection — default to primary, fall back to first connected
-  const [fromAccount, setFromAccount] = useState(
-    defaultAccount || accounts[0]?.email || null,
-  );
-
-  // Keep fromAccount valid if accounts list changes (e.g. user disconnects one)
-  useEffect(() => {
-    if (fromAccount && !accounts.find((a) => a.email === fromAccount)) {
-      setFromAccount(defaultAccount || accounts[0]?.email || null);
-    }
-  }, [accounts, defaultAccount, fromAccount]);
+  // FROM account state: derive from the primary unless the user
+  // explicitly picks a different one via the dropdown. This way the
+  // dropdown follows primaryAccount whenever it changes (e.g. auth
+  // status finishes loading after the card was first rendered).
+  const [userPickedAccount, setUserPickedAccount] = useState(null);
+  const fromAccount = userPickedAccount || defaultAccount || accounts[0]?.email || null;
 
   const handleField = (k) => (e) => onUpdate({ ...draft, [k]: e.target.value });
 
@@ -1292,26 +1287,31 @@ function DraftCard({ draft, accounts = [], defaultAccount, onUpdate, onSent, onD
   };
 
   if (done?.type === 'sent') {
+    const fromAcct = done.entry.account || 'inbox';
     return (
       <div style={{ ...styles.draftCard, borderColor: COLORS.greenDim }}>
         <div style={{ ...styles.draftHeader, color: COLORS.green }}>
-          <CheckCircle2 size={11} /> SENT · {done.entry.to}
+          <CheckCircle2 size={11} /> SENT from {fromAcct} → {done.entry.to}
         </div>
       </div>
     );
   }
 
   if (done?.type === 'draft') {
+    const fromAcct = done.entry.account || '';
+    const draftsUrl = fromAcct
+      ? `https://mail.google.com/mail/u/0/?authuser=${encodeURIComponent(fromAcct)}#drafts`
+      : 'https://mail.google.com/mail/u/0/#drafts';
     return (
       <div style={{ ...styles.draftCard, borderColor: COLORS.cyanDim }}>
         <div style={{ ...styles.draftHeader, color: COLORS.cyan }}>
-          <span><CheckCircle2 size={11} /> SAVED TO GMAIL DRAFTS · {done.entry.to}</span>
+          <span><CheckCircle2 size={11} /> SAVED in {fromAcct || 'gmail'} drafts → {done.entry.to}</span>
           <a
-            href="https://mail.google.com/mail/u/0/#drafts"
+            href={draftsUrl}
             target="_blank" rel="noreferrer"
             style={{ ...styles.draftReason, color: COLORS.cyan, textDecoration: 'underline' }}
           >
-            open drafts ↗
+            open {fromAcct.split('@')[0] || ''} drafts ↗
           </a>
         </div>
       </div>
@@ -1330,7 +1330,7 @@ function DraftCard({ draft, accounts = [], defaultAccount, onUpdate, onSent, onD
           <div style={styles.draftFieldLabel}>FROM</div>
           <select
             value={fromAccount || ''}
-            onChange={(e) => setFromAccount(e.target.value)}
+            onChange={(e) => setUserPickedAccount(e.target.value)}
             style={styles.draftSelect}
           >
             {accounts.map((a) => (
