@@ -103,7 +103,7 @@ async function resolveAccount(accountEmail) {
   return { email: primary.email, name: acct?.name || primary.email, client: primary.client };
 }
 
-async function buildGmailMessage({ to, subject, body, accountEmail }) {
+async function buildGmailMessage({ to, subject, body, accountEmail, threadId }) {
   if (!to || !subject || !body) throw new Error('to, subject, and body are required');
 
   const blocked = checkBlocked({ to, cc: CC_ALWAYS, subject, body });
@@ -114,10 +114,41 @@ async function buildGmailMessage({ to, subject, body, accountEmail }) {
   }
 
   const { email, name, client } = await resolveAccount(accountEmail);
-  const from = `${name} <${email}>`;
   const gmail = google.gmail({ version: 'v1', auth: client });
+
+  // Gmail thread IDs are per-mailbox. If the caller passed a threadId
+  // that came from a different account's sync (very common when JARVIS
+  // is drafting from primary but the pipeline data was indexed by
+  // another inbox), threads.get will 404. Try the original first; on
+  // miss, fall back to a contact lookup inside the target mailbox.
+  let resolvedThreadId = null;
+  if (threadId) {
+    try {
+      await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'minimal' });
+      resolvedThreadId = threadId;
+    } catch (err) {
+      console.log(`[email] threadId ${threadId} not in ${email} (${err.message}); looking up by contact ${to}`);
+      try {
+        const list = await gmail.users.threads.list({
+          userId: 'me',
+          q: `from:${to} OR to:${to}`,
+          maxResults: 1,
+        });
+        resolvedThreadId = list.data.threads?.[0]?.id || null;
+        if (resolvedThreadId) {
+          console.log(`[email] resolved to threadId ${resolvedThreadId} for ${to} in ${email}`);
+        } else {
+          console.log(`[email] no thread for ${to} in ${email}; drafting as new email`);
+        }
+      } catch (lookupErr) {
+        console.error('[email] thread lookup failed:', lookupErr.message);
+      }
+    }
+  }
+
+  const from = `${name} <${email}>`;
   const raw = buildMime({ to, cc: CC_ALWAYS, from, subject, body });
-  return { gmail, raw, account: { email, name } };
+  return { gmail, raw, account: { email, name }, threadId: resolvedThreadId };
 }
 
 async function appendLog(entry) {
@@ -146,11 +177,11 @@ async function registerRecipient(toHeader, firstSeenVia) {
 }
 
 export async function sendEmail({ to, subject, body, threadId, accountEmail }) {
-  const { gmail, raw, account } = await buildGmailMessage({ to, subject, body, accountEmail });
+  const { gmail, raw, account, threadId: validThreadId } = await buildGmailMessage({ to, subject, body, accountEmail, threadId });
 
   const result = await gmail.users.messages.send({
     userId: 'me',
-    requestBody: { raw, ...(threadId ? { threadId } : {}) },
+    requestBody: { raw, ...(validThreadId ? { threadId: validThreadId } : {}) },
   });
 
   const entry = {
@@ -170,11 +201,11 @@ export async function sendEmail({ to, subject, body, threadId, accountEmail }) {
 }
 
 export async function saveDraft({ to, subject, body, threadId, accountEmail }) {
-  const { gmail, raw, account } = await buildGmailMessage({ to, subject, body, accountEmail });
+  const { gmail, raw, account, threadId: validThreadId } = await buildGmailMessage({ to, subject, body, accountEmail, threadId });
 
   const result = await gmail.users.drafts.create({
     userId: 'me',
-    requestBody: { message: { raw, ...(threadId ? { threadId } : {}) } },
+    requestBody: { message: { raw, ...(validThreadId ? { threadId: validThreadId } : {}) } },
   });
 
   const entry = {
