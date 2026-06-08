@@ -40,7 +40,7 @@
  *   database. For now, you are the verifier.
  */
 
-const { execFile } = require("node:child_process");
+import { execFile } from "node:child_process";
 
 // --- read the two arguments the user typed ---
 const phone = process.argv[2];
