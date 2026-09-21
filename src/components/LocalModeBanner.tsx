@@ -12,9 +12,10 @@ export default function LocalModeBanner({ brandCount }: { brandCount: number }) 
     >
       <strong style={{ fontSize: 13.5 }}>Running locally on seeded data</strong>
       <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--ink-secondary)" }}>
-        {brandCount} brands from a real scan of the ZMM inbox covering 31 August to 21 September
-        2026. Moving cards, assigning owners and editing notes all work and persist to{" "}
-        <code>.local-data/db.json</code>. Nothing here reads live mail — for that, connect
+        Every submission that came through the collegiateagency.com form between 31 August and
+        21 September 2026 — {brandCount} of them — plus the conversation that followed each one.
+        Moving cards, assigning owners and editing notes all work and persist to{" "}
+        <code>.local-data/db.json</code>. Nothing here reads live mail; for that, connect
         Supabase and Gmail and the hourly scan takes over.
       </p>
     </div>

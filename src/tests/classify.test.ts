@@ -1,15 +1,25 @@
 import { describe, expect, it } from "vitest";
 
-import { nameFromDomain, rootDomain, screenThread, type ScreenContext } from "@/lib/classify";
+import {
+  groupKeyFor,
+  nameFromDomain,
+  parseFormSubmission,
+  rootDomain,
+  screenThread,
+  summaryFromForm,
+  type ScreenContext,
+} from "@/lib/classify";
 import type { Direction, ScannedMessage, ScannedThread } from "@/lib/types";
 
 const ctx: ScreenContext = {
   ownAddresses: new Set(["shane@zmmevents.com", "zach@zmmevents.com"]),
   ownDomains: new Set(["zmmevents.com"]),
-  ignored: new Set(["substack.com", "noisy-vendor.com"]),
-  blocked: new Set(["cbrands.com"]),
-  knownGroupKeys: new Set(["thesaltyapp.com"]),
+  formSenders: new Set(["no-reply@zmmevents.com"]),
   formSubjectMatch: "brand inquiry",
+  knownGroupKeys: new Set(["thesaltyapp.com", "itsfratflix.com"]),
+  blocked: new Set(["cbrands.com"]),
+  ignored: new Set(["substack.com"]),
+  intakeMode: "form_only",
 };
 
 let counter = 0;
@@ -29,7 +39,7 @@ function message(overrides: Partial<ScannedMessage> = {}): ScannedMessage {
     snippet: "We'd love to sponsor a few dates on the tour.",
     sentAt: "2026-09-01T10:00:00Z",
     labelIds: ["INBOX"],
-    headers: { from: "Maya Chen <maya@flybyjing.com>" },
+    headers: {},
     ...overrides,
   };
 }
@@ -38,183 +48,44 @@ function thread(messages: ScannedMessage[]): ScannedThread {
   return { id: "t1", messages };
 }
 
-describe("screenThread", () => {
-  it("accepts a real brand writing in, and groups it by domain", () => {
-    const result = screenThread(thread([message()]), ctx);
-
-    expect(result.verdict).toBe("candidate");
-    expect(result.candidate?.groupKey).toBe("flybyjing.com");
-    expect(result.candidate?.domain).toBe("flybyjing.com");
-    expect(result.candidate?.contactEmail).toBe("maya@flybyjing.com");
+const formMail = (overrides: Partial<ScannedMessage> = {}) =>
+  message({
+    fromEmail: "no-reply@zmmevents.com",
+    fromName: null,
+    subject: "New brand inquiry - FlatFlow",
+    body:
+      "Collegiate Agency New brand inquiry Submission First Name Vraj Last Name Patel " +
+      "Company FlatFlow Email vrajpatel@orbitstudio.us Phone 8479897408 " +
+      "Interests Brand Ambassadors Budget Under 10k",
+    ...overrides,
   });
 
-  it("groups a free-mail sender by address, since the domain says nothing", () => {
-    const result = screenThread(
-      thread([message({ fromEmail: "maya@gmail.com", headers: {} })]),
-      ctx,
-    );
+// ---------------------------------------------------------------------------
+// Intake: the website form is the only front door.
+// ---------------------------------------------------------------------------
 
-    expect(result.verdict).toBe("candidate");
-    expect(result.candidate?.groupKey).toBe("maya@gmail.com");
-    expect(result.candidate?.domain).toBeNull();
-  });
-
-  it("groups subdomains with the parent company", () => {
-    const result = screenThread(
-      thread([message({ fromEmail: "team@mail.flybyjing.com", headers: {} })]),
-      ctx,
-    );
-
-    expect(result.candidate?.groupKey).toBe("flybyjing.com");
-  });
-
-  it("skips a thread we started that nobody answered", () => {
-    const result = screenThread(
-      thread([message({ direction: "outbound", fromEmail: "shane@zmmevents.com" })]),
-      ctx,
-    );
-
-    expect(result.verdict).toBe("skip");
-    expect(result.reason).toMatch(/outbound-only/);
-  });
-
-  it("skips internal mail", () => {
-    const result = screenThread(
-      thread([message({ fromEmail: "zach@zmmevents.com", headers: {} })]),
-      ctx,
-    );
-
-    expect(result.verdict).toBe("skip");
-    expect(result.reason).toBe("Internal mail");
-  });
-
-  it("skips no-reply robots", () => {
-    for (const address of [
-      "no-reply@brand.com",
-      "noreply@brand.com",
-      "notifications@brand.com",
-      "bounces@brand.com",
-    ]) {
-      const result = screenThread(thread([message({ fromEmail: address, headers: {} })]), ctx);
-      expect(result.verdict, address).toBe("skip");
-    }
-  });
-
-  it("skips newsletters by their List-Unsubscribe header", () => {
-    const result = screenThread(
-      thread([
-        message({
-          fromEmail: "hello@somebrand.com",
-          headers: { "List-Unsubscribe": "<https://somebrand.com/unsub>" },
-        }),
-      ]),
-      ctx,
-    );
-
-    expect(result.verdict).toBe("skip");
-    expect(result.reason).toMatch(/List-Unsubscribe/);
-  });
-
-  it("skips anything Gmail filed as promotions or social", () => {
-    for (const label of ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "SPAM"]) {
-      const result = screenThread(
-        thread([message({ fromEmail: "hi@somebrand.com", headers: {}, labelIds: [label] })]),
-        ctx,
-      );
-      expect(result.verdict, label).toBe("skip");
-    }
-  });
-
-  it("skips auto-generated mail", () => {
-    const result = screenThread(
-      thread([
-        message({
-          fromEmail: "hi@somebrand.com",
-          headers: { "Auto-Submitted": "auto-generated" },
-        }),
-      ]),
-      ctx,
-    );
-
-    expect(result.verdict).toBe("skip");
-  });
-
-  it("skips senders the team has already dismissed", () => {
-    const result = screenThread(
-      thread([message({ fromEmail: "person@noisy-vendor.com", headers: {} })]),
-      ctx,
-    );
-
-    expect(result.verdict).toBe("skip");
-    expect(result.reason).toMatch(/dismissed/);
-  });
-
-  it("flags a do-not-contact entity instead of quietly dropping it", () => {
-    const result = screenThread(
-      thread([message({ fromEmail: "buyer@cbrands.com", headers: {} })]),
-      ctx,
-    );
-
-    expect(result.verdict).toBe("blocked");
-    expect(result.candidate?.groupKey).toBe("cbrands.com");
-  });
-
-  it("judges the thread by its first inbound message, not its latest", () => {
-    // A brand writes in, we reply, they reply again. Still one candidate.
-    const result = screenThread(
-      thread([
-        message({ sentAt: "2026-09-01T10:00:00Z" }),
-        message({
-          direction: "outbound",
-          fromEmail: "shane@zmmevents.com",
-          sentAt: "2026-09-02T10:00:00Z",
-          labelIds: ["SENT"],
-        }),
-        message({ sentAt: "2026-09-03T10:00:00Z", headers: {} }),
-      ]),
-      ctx,
-    );
-
-    expect(result.verdict).toBe("candidate");
-    expect(result.candidate?.contactEmail).toBe("maya@flybyjing.com");
-  });
-
-  it("skips an empty thread rather than throwing", () => {
-    expect(screenThread(thread([]), ctx).verdict).toBe("skip");
-  });
-});
-
-// Found by running the scan against the real ZMM inbox: the agency's website
-// form notifies from its own no-reply address, which the screen rejected twice
-// over. That is the main intake channel.
 describe("website form submissions", () => {
-  const formMail = (overrides: Partial<ScannedMessage> = {}) =>
-    message({
-      fromEmail: "no-reply@zmmevents.com",
-      fromName: null,
-      subject: "New brand inquiry - FlatFlow",
-      headers: {},
-      body:
-        "Collegiate Agency New brand inquiry Submission First Name Vraj Last Name Patel " +
-        "Company FlatFlow Email vrajpatel@orbitstudio.us Phone 8479897408 " +
-        "Interests Brand Ambassadors Budget Under 10k",
-      ...overrides,
-    });
-
   it("creates a brand from the form's contact, not the no-reply sender", () => {
     const result = screenThread(thread([formMail()]), ctx);
 
-    expect(result.verdict).toBe("candidate");
-    expect(result.candidate?.contactEmail).toBe("vrajpatel@orbitstudio.us");
-    expect(result.candidate?.groupKey).toBe("orbitstudio.us");
+    expect(result.verdict).toBe("submission");
+    if (result.verdict !== "submission") return;
+    expect(result.candidate.contactEmail).toBe("vrajpatel@orbitstudio.us");
+    expect(result.candidate.groupKey).toBe("orbitstudio.us");
   });
 
   it("takes the brand name from the subject", () => {
-    expect(screenThread(thread([formMail()]), ctx).candidate?.name).toBe("FlatFlow");
+    const result = screenThread(thread([formMail()]), ctx);
+    expect(result.verdict === "submission" && result.candidate.name).toBe("FlatFlow");
   });
 
-  it("pulls the contact's full name out of the body", () => {
-    expect(screenThread(thread([formMail()]), ctx).candidate?.contactName).toBe("Vraj Patel");
+  it("keeps what they asked for and what they will spend", () => {
+    const result = screenThread(thread([formMail()]), ctx);
+    if (result.verdict !== "submission") throw new Error("expected a submission");
+
+    expect(result.candidate.interests).toBe("Brand Ambassadors");
+    expect(result.candidate.budget).toBe("Under 10k");
+    expect(summaryFromForm(result.candidate)).toBe("Brand Ambassadors · Budget: Under 10k");
   });
 
   it("falls back to the snippet when the body was not fetched", () => {
@@ -228,7 +99,40 @@ describe("website form submissions", () => {
       ctx,
     );
 
-    expect(result.candidate?.contactEmail).toBe("vrajpatel@orbitstudio.us");
+    expect(result.verdict === "submission" && result.candidate.contactEmail).toBe(
+      "vrajpatel@orbitstudio.us",
+    );
+  });
+
+  it("ignores mail from the form address that is not a brand inquiry", () => {
+    // Ambassador applications come from the same no-reply address. They are
+    // people applying to work campus, not brands buying.
+    const result = screenThread(
+      thread([
+        formMail({
+          subject: "New ambassador application - Emillie Rosario, Kean University",
+          body: "Full Name Emillie Rosario Email emillie@example.com City Bloomfield",
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("skip");
+  });
+
+  it("ignores a form submitted with one of our own addresses", () => {
+    const result = screenThread(
+      thread([
+        formMail({
+          subject: "New brand inquiry - SOS consultants",
+          body: "Company SOS consultants Email shane@zmmevents.com Budget Under 10k",
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("skip");
+    expect(result.reason).toMatch(/our own addresses/);
   });
 
   it("still honours do-not-contact rules", () => {
@@ -253,49 +157,97 @@ describe("website form submissions", () => {
 
     expect(result.verdict).toBe("skip");
   });
+});
 
-  it("leaves ordinary internal mail alone", () => {
+describe("everything that is not a submission", () => {
+  it("does not create a brand from a cold inbound email", () => {
+    // The whole point of form-only intake: a stranger emailing in is not a lead.
+    const result = screenThread(thread([message()]), ctx);
+
+    expect(result.verdict).toBe("skip");
+    expect(result.reason).toMatch(/Not a website submission/);
+  });
+
+  it("does not create a brand from a newsletter", () => {
     const result = screenThread(
       thread([
-        message({ fromEmail: "zach@zmmevents.com", subject: "Collegiate Agency SOP", headers: {} }),
+        message({
+          fromEmail: "hello@substack.com",
+          headers: { "List-Unsubscribe": "<https://substack.com/unsub>" },
+        }),
       ]),
       ctx,
     );
 
     expect(result.verdict).toBe("skip");
-    expect(result.reason).toBe("Internal mail");
+  });
+
+  it("does not create a brand from internal mail", () => {
+    expect(screenThread(thread([message({ fromEmail: "zach@zmmevents.com" })]), ctx).verdict).toBe(
+      "skip",
+    );
   });
 });
 
-// Also found live: a brand that came in through the form, got two emails, and
-// never replied had no inbound message on that thread — so it vanished. That
-// is the lead most worth chasing.
-describe("outbound-only threads", () => {
-  const outboundTo = (address: string) =>
-    message({
-      direction: "outbound",
-      fromEmail: "shane@zmmevents.com",
-      toEmails: [address, "zach@zmmevents.com"],
-      labelIds: ["SENT"],
-      subject: "Collegiate Agency x The Salty App",
-      headers: {},
-    });
+// ---------------------------------------------------------------------------
+// Follow-on: once a brand is on the board, its conversation attaches.
+// ---------------------------------------------------------------------------
 
-  it("attaches to a brand already on the board", () => {
-    const result = screenThread(thread([outboundTo("s.angelova@thesaltyapp.com")]), ctx);
+describe("conversations with brands already on the board", () => {
+  it("attaches an inbound reply from the submitted domain", () => {
+    const result = screenThread(
+      thread([message({ fromEmail: "cj@itsfratflix.com", subject: "Re: Collegiate Agency" })]),
+      ctx,
+    );
 
-    expect(result.verdict).toBe("candidate");
-    expect(result.candidate?.groupKey).toBe("thesaltyapp.com");
+    expect(result.verdict).toBe("attach");
+    expect(result.verdict === "attach" && result.groupKey).toBe("itsfratflix.com");
   });
 
-  it("still skips cold outreach to a brand nobody has heard from", () => {
-    const result = screenThread(thread([outboundTo("someone@brand-we-invented.com")]), ctx);
+  it("attaches our outbound message to them", () => {
+    const result = screenThread(
+      thread([
+        message({
+          direction: "outbound",
+          fromEmail: "shane@zmmevents.com",
+          toEmails: ["s.angelova@thesaltyapp.com", "zach@zmmevents.com"],
+          labelIds: ["SENT"],
+        }),
+      ]),
+      ctx,
+    );
 
-    expect(result.verdict).toBe("skip");
-    expect(result.reason).toMatch(/outbound-only/);
+    expect(result.verdict).toBe("attach");
+    expect(result.verdict === "attach" && result.groupKey).toBe("thesaltyapp.com");
   });
 
-  it("does not treat a teammate as the brand", () => {
+  it("attaches when the brand is only on CC", () => {
+    const result = screenThread(
+      thread([
+        message({
+          direction: "outbound",
+          fromEmail: "shane@zmmevents.com",
+          toEmails: ["zach@zmmevents.com"],
+          ccEmails: ["cj@itsfratflix.com"],
+          labelIds: ["SENT"],
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("attach");
+  });
+
+  it("attaches a colleague writing from the same company", () => {
+    const result = screenThread(
+      thread([message({ fromEmail: "someone.else@itsfratflix.com" })]),
+      ctx,
+    );
+
+    expect(result.verdict === "attach" && result.groupKey).toBe("itsfratflix.com");
+  });
+
+  it("does not attach a thread that only involves our own people", () => {
     const result = screenThread(
       thread([
         message({
@@ -303,7 +255,6 @@ describe("outbound-only threads", () => {
           fromEmail: "shane@zmmevents.com",
           toEmails: ["zach@zmmevents.com"],
           labelIds: ["SENT"],
-          headers: {},
         }),
       ]),
       ctx,
@@ -313,13 +264,81 @@ describe("outbound-only threads", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// The optional second front door.
+// ---------------------------------------------------------------------------
+
+describe("form_and_inbound mode", () => {
+  const openCtx: ScreenContext = { ...ctx, intakeMode: "form_and_inbound" };
+
+  it("lets a cold inbound create a brand", () => {
+    const result = screenThread(thread([message()]), openCtx);
+
+    expect(result.verdict).toBe("submission");
+    expect(result.verdict === "submission" && result.candidate.groupKey).toBe("flybyjing.com");
+  });
+
+  it("still skips senders the team has dismissed", () => {
+    const result = screenThread(thread([message({ fromEmail: "hi@substack.com" })]), openCtx);
+    expect(result.verdict).toBe("skip");
+  });
+
+  it("still skips our own people", () => {
+    const result = screenThread(
+      thread([message({ fromEmail: "zach@zmmevents.com" })]),
+      openCtx,
+    );
+    expect(result.verdict).toBe("skip");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Address handling
+// ---------------------------------------------------------------------------
+
+describe("parseFormSubmission", () => {
+  it("reads every labelled field", () => {
+    const parsed = parseFormSubmission(formMail());
+
+    expect(parsed).toEqual({
+      company: "FlatFlow",
+      contactName: "Vraj Patel",
+      contactEmail: "vrajpatel@orbitstudio.us",
+      budget: "Under 10k",
+      interests: "Brand Ambassadors",
+    });
+  });
+
+  it("finds an address even when the Email label is missing", () => {
+    const parsed = parseFormSubmission(
+      formMail({ body: "Company Mystery Contact reach me at hello@mystery.com thanks" }),
+    );
+
+    expect(parsed.contactEmail).toBe("hello@mystery.com");
+  });
+});
+
+describe("groupKeyFor", () => {
+  it("groups a company by its domain", () => {
+    expect(groupKeyFor("maya@flybyjing.com")).toBe("flybyjing.com");
+  });
+
+  it("groups subdomains with the parent company", () => {
+    expect(groupKeyFor("team@mail.marketing.flybyjing.com")).toBe("flybyjing.com");
+  });
+
+  it("falls back to the address for free mail, where a domain proves nothing", () => {
+    expect(groupKeyFor("maya@gmail.com")).toBe("maya@gmail.com");
+  });
+
+  it("is case-insensitive", () => {
+    expect(groupKeyFor("Maya@FlyByJing.com")).toBe("flybyjing.com");
+  });
+});
+
 describe("rootDomain", () => {
   it("keeps two-part domains", () => {
     expect(rootDomain("flybyjing.com")).toBe("flybyjing.com");
-  });
-
-  it("strips subdomains", () => {
-    expect(rootDomain("mail.marketing.flybyjing.com")).toBe("flybyjing.com");
   });
 
   it("handles two-part public suffixes", () => {

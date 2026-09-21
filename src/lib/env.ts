@@ -52,13 +52,33 @@ export function ownAddresses(connectedInbox?: string | null): Set<string> {
 }
 
 /**
- * Subject phrase that marks a website-form notification.
+ * Addresses the collegiateagency.com form sends its notifications from.
  *
- * The form mails come from the agency's own no-reply address, so they only get
- * onto the board because of this match.
+ * This is the front door: intake is these messages and nothing else, so an
+ * address that stops matching means the board silently stops filling. If the
+ * site's sending address ever changes, change it here.
+ */
+export function formSenders(): Set<string> {
+  const configured = list(process.env.FORM_SENDER);
+  return new Set(configured.length > 0 ? configured : ["no-reply@zmmevents.com"]);
+}
+
+/**
+ * Subject phrase that marks a brand submission.
+ *
+ * Sender alone is not enough — ambassador applications arrive from the same
+ * address, and those are people applying to work campus, not brands buying.
  */
 export function formSubjectMatch(): string {
   return (process.env.FORM_SUBJECT_MATCH ?? "brand inquiry").trim().toLowerCase();
+}
+
+/**
+ * Where leads may come from. The agency's rule is the form only; the other
+ * mode is one variable away if a lead ever arrives another way.
+ */
+export function intakeMode(): "form_only" | "form_and_inbound" {
+  return process.env.INTAKE_MODE === "form_and_inbound" ? "form_and_inbound" : "form_only";
 }
 
 /** How far back the very first scan reaches. */

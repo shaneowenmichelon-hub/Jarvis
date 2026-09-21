@@ -5,25 +5,29 @@
  *
  *   1. take the lock, so two runs never overlap
  *   2. work out how far back to look
- *   3. pull matching threads from Gmail
- *   4. screen out everything that is not a brand writing in
- *   5. group what is left into brands, threads, and messages
- *   6. recompute each affected brand's email facts from the full record
- *   7. move stages — but never one a human has pinned
+ *   3. pull the website form's notifications — this is the only intake
+ *   4. pull the conversations of every brand already on the board
+ *   5. save threads and messages, recompute each brand's email facts
+ *   6. move stages — but never one a human has pinned
  *
- * Every step writes to `scan_runs`, so when the board looks wrong there is a
- * log that says what the last run actually did.
+ * Step 3 and step 4 are separate Gmail queries rather than one sweep of the
+ * inbox. The agency gets a few hundred threads a week and a handful of them
+ * matter; asking Gmail for exactly those two sets is both faster and, more
+ * importantly, means nothing else can end up on the board by accident.
  */
 
 import {
   enrichWithClaude,
   screenThread,
+  summaryFromForm,
   type BrandCandidate,
   type ScreenContext,
 } from "./classify";
 import {
   backfillDays,
+  formSenders,
   formSubjectMatch,
+  intakeMode,
   ownAddresses,
   ownDomains,
   scanThreadLimit,
@@ -69,11 +73,13 @@ const THREAD_CONCURRENCY = 6;
 /** Re-look at this much already-scanned time, so nothing slips through a gap. */
 const OVERLAP_HOURS = 24;
 
+/** Brands per conversation query. Keeps each query well inside Gmail's limit. */
+const KEYS_PER_QUERY = 15;
+
 export async function runScan(options: ScanOptions): Promise<ScanSummary> {
   const db = supabaseAdmin();
 
-  const blocked = await activeRun(options.force ?? false);
-  if (blocked) {
+  if (await activeRun(options.force ?? false)) {
     return {
       runId: null,
       status: "skipped",
@@ -99,7 +105,7 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
   }
 
   const runId = run.id as number;
-  const counters = {
+  const counters: Counters = {
     threadsSeen: 0,
     messagesSeen: 0,
     brandsCreated: 0,
@@ -110,8 +116,7 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
   let windowStart: string | null = null;
 
   try {
-    const result = await scanInbox(options, counters);
-    windowStart = result.windowStart;
+    windowStart = (await scanInbox(options, counters)).windowStart;
 
     await db
       .from("scan_runs")
@@ -142,14 +147,16 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
   }
 }
 
-function snakeCounters(c: {
+interface Counters {
   threadsSeen: number;
   messagesSeen: number;
   brandsCreated: number;
   brandsUpdated: number;
   stagesChanged: number;
   skipped: number;
-}) {
+}
+
+function snakeCounters(c: Counters) {
   return {
     threads_seen: c.threadsSeen,
     messages_seen: c.messagesSeen,
@@ -160,30 +167,18 @@ function snakeCounters(c: {
   };
 }
 
-/** True when another run holds the lock. */
 async function activeRun(force: boolean): Promise<boolean> {
   if (force) return false;
 
-  const db = supabaseAdmin();
   const cutoff = new Date(Date.now() - LOCK_TIMEOUT_MS).toISOString();
-
-  const { data } = await db
+  const { data } = await supabaseAdmin()
     .from("scan_runs")
-    .select("id, started_at")
+    .select("id")
     .eq("status", "running")
     .gte("started_at", cutoff)
     .limit(1);
 
   return (data?.length ?? 0) > 0;
-}
-
-interface Counters {
-  threadsSeen: number;
-  messagesSeen: number;
-  brandsCreated: number;
-  brandsUpdated: number;
-  stagesChanged: number;
-  skipped: number;
 }
 
 async function scanInbox(
@@ -215,15 +210,10 @@ async function scanInbox(
     throw error;
   }
 
-  // --- the window -------------------------------------------------------
+  // --- the window and what we already know ------------------------------
   const since = resolveWindow(account.last_window_at as string | null, options);
-  const query = [
-    "in:anywhere",
-    "-in:chats",
-    `after:${Math.floor(since.getTime() / 1000)}`,
-  ].join(" ");
+  const afterSeconds = Math.floor(since.getTime() / 1000);
 
-  // --- what we already know --------------------------------------------
   const [ignored, blockedPatterns, knownThreadIds, knownGroupKeys] = await Promise.all([
     loadPatterns("ignored_senders"),
     loadPatterns("blocked_entities"),
@@ -234,20 +224,57 @@ async function scanInbox(
   const ctx: ScreenContext = {
     ownAddresses: ownAddresses(account.email as string),
     ownDomains: ownDomains(),
-    ignored,
-    blocked: blockedPatterns,
-    knownGroupKeys,
+    formSenders: formSenders(),
     formSubjectMatch: formSubjectMatch(),
+    knownGroupKeys,
+    blocked: blockedPatterns,
+    ignored,
+    intakeMode: intakeMode(),
   };
 
-  // --- pull threads -----------------------------------------------------
-  const threadIds = await listThreadIds(accessToken, query, scanThreadLimit());
-  counters.threadsSeen = threadIds.length;
+  // --- ask Gmail for exactly the two sets that matter -------------------
+  const threadIds = new Set<string>();
 
-  const threads = await mapWithConcurrency(threadIds, THREAD_CONCURRENCY, async (id) => {
+  // Submissions.
+  const senders = [...ctx.formSenders].join(" OR ");
+  for (const id of await listThreadIds(
+    accessToken,
+    `in:anywhere after:${afterSeconds} from:(${senders})`,
+    scanThreadLimit(),
+  )) {
+    threadIds.add(id);
+  }
+
+  // Conversations with brands already on the board.
+  for (const batch of chunk([...knownGroupKeys], KEYS_PER_QUERY)) {
+    const clause = batch.map((key) => `from:${key} to:${key} cc:${key}`).join(" ");
+    for (const id of await listThreadIds(
+      accessToken,
+      `in:anywhere after:${afterSeconds} {${clause}}`,
+      scanThreadLimit(),
+    )) {
+      threadIds.add(id);
+    }
+  }
+
+  // In the optional inbound mode there is no way to know in advance who might
+  // write in, so that mode — and only that mode — sweeps the inbox.
+  if (ctx.intakeMode === "form_and_inbound") {
+    for (const id of await listThreadIds(
+      accessToken,
+      `in:anywhere -in:chats after:${afterSeconds}`,
+      scanThreadLimit(),
+    )) {
+      threadIds.add(id);
+    }
+  }
+
+  counters.threadsSeen = threadIds.size;
+
+  const threads = await mapWithConcurrency([...threadIds], THREAD_CONCURRENCY, async (id) => {
     try {
-      // Bodies are only needed to classify a thread we have never seen. For
-      // threads already on the board, metadata is all the stage machine reads.
+      // Bodies are only needed to read a form's fields. Once a thread is known,
+      // metadata is all the stage machine looks at.
       return await fetchThread(accessToken, id, {
         withBody: !knownThreadIds.has(id),
         ownAddresses: ctx.ownAddresses,
@@ -261,8 +288,19 @@ async function scanInbox(
   // --- screen and group -------------------------------------------------
   const groups = new Map<
     string,
-    { candidate: BrandCandidate; threads: ScannedThread[]; blocked: boolean }
+    { candidate: BrandCandidate | null; threads: ScannedThread[]; blocked: boolean }
   >();
+
+  const add = (key: string, thread: ScannedThread, candidate: BrandCandidate | null, blocked = false) => {
+    const existing = groups.get(key);
+    if (existing) {
+      existing.threads.push(thread);
+      existing.candidate = existing.candidate ?? candidate;
+      existing.blocked = existing.blocked || blocked;
+    } else {
+      groups.set(key, { candidate, threads: [thread], blocked });
+    }
+  };
 
   for (const thread of threads) {
     if (!thread) {
@@ -271,22 +309,19 @@ async function scanInbox(
     }
 
     const screened = screenThread(thread, ctx);
-    if (screened.verdict === "skip" || !screened.candidate) {
-      counters.skipped += 1;
-      continue;
-    }
 
-    const key = screened.candidate.groupKey;
-    const existing = groups.get(key);
-    if (existing) {
-      existing.threads.push(thread);
-      existing.blocked = existing.blocked || screened.verdict === "blocked";
-    } else {
-      groups.set(key, {
-        candidate: screened.candidate,
-        threads: [thread],
-        blocked: screened.verdict === "blocked",
-      });
+    switch (screened.verdict) {
+      case "submission":
+        add(screened.candidate.groupKey, thread, screened.candidate);
+        break;
+      case "blocked":
+        add(screened.candidate.groupKey, thread, screened.candidate, true);
+        break;
+      case "attach":
+        add(screened.groupKey, thread, null);
+        break;
+      default:
+        counters.skipped += 1;
     }
   }
 
@@ -298,10 +333,9 @@ async function scanInbox(
     return { windowStart: since.toISOString() };
   }
 
-  // --- brands -----------------------------------------------------------
+  // --- brands, threads, messages ---------------------------------------
   const brandIdByKey = await upsertBrands(groups, counters);
 
-  // --- threads and messages --------------------------------------------
   let newestSeen = since;
   const threadRows: Record<string, unknown>[] = [];
   const messageRows: Record<string, unknown>[] = [];
@@ -332,24 +366,22 @@ async function scanInbox(
         updated_at: new Date().toISOString(),
       });
 
-      for (const message of sorted) {
-        messageRows.push(messageRow(message, brandId));
-      }
+      for (const message of sorted) messageRows.push(messageRow(message, brandId));
     }
   }
 
   counters.messagesSeen = messageRows.length;
 
   if (threadRows.length > 0) {
-    await chunked(threadRows, 500, async (chunk) => {
-      const { error } = await db.from("threads").upsert(chunk, { onConflict: "id" });
+    await chunked(threadRows, 500, async (rows) => {
+      const { error } = await db.from("threads").upsert(rows, { onConflict: "id" });
       if (error) throw new Error(`Saving threads failed: ${error.message}`);
     });
   }
 
   if (messageRows.length > 0) {
-    await chunked(messageRows, 500, async (chunk) => {
-      const { error } = await db.from("messages").upsert(chunk, { onConflict: "id" });
+    await chunked(messageRows, 500, async (rows) => {
+      const { error } = await db.from("messages").upsert(rows, { onConflict: "id" });
       if (error) throw new Error(`Saving messages failed: ${error.message}`);
     });
   }
@@ -358,9 +390,7 @@ async function scanInbox(
   const brandIds = [...brandIdByKey.values()];
 
   const { error: refreshError } = await db.rpc("refresh_brand_facts", { ids: brandIds });
-  if (refreshError) {
-    throw new Error(`Refreshing brand facts failed: ${refreshError.message}`);
-  }
+  if (refreshError) throw new Error(`Refreshing brand facts failed: ${refreshError.message}`);
 
   counters.stagesChanged = await applyStages(brandIds);
   counters.brandsUpdated = brandIds.length - counters.brandsCreated;
@@ -377,17 +407,12 @@ async function scanInbox(
 }
 
 function resolveWindow(lastWindowAt: string | null, options: ScanOptions): Date {
-  if (options.sinceDays) {
-    return new Date(Date.now() - options.sinceDays * 86_400_000);
-  }
-
-  if (!lastWindowAt) {
-    return new Date(Date.now() - backfillDays() * 86_400_000);
-  }
+  if (options.sinceDays) return new Date(Date.now() - options.sinceDays * 86_400_000);
+  if (!lastWindowAt) return new Date(Date.now() - backfillDays() * 86_400_000);
 
   // Re-read the last day every time. Gmail's `after:` has second granularity
-  // and messages can land out of order; the overlap makes a missed thread
-  // impossible rather than unlikely. Upserts make the repeat work free.
+  // and mail can land out of order; the overlap makes a missed thread
+  // impossible rather than unlikely, and upserts make the repeat work free.
   return new Date(new Date(lastWindowAt).getTime() - OVERLAP_HOURS * 3_600_000);
 }
 
@@ -418,43 +443,42 @@ async function loadKnownThreadIds(): Promise<Set<string>> {
   return new Set((data ?? []).map((row) => String(row.id)));
 }
 
-/** Brands already on the board, so outbound threads can attach to them. */
+/** Brands on the board. Their conversations are what step 4 goes looking for. */
 async function loadKnownGroupKeys(): Promise<Set<string>> {
-  const { data } = await supabaseAdmin().from("brands").select("group_key");
+  const { data } = await supabaseAdmin().from("brands").select("group_key").eq("blocked", false);
   return new Set((data ?? []).map((row) => String(row.group_key)));
 }
 
 /**
- * Find or create a brand per group.
+ * Create the brands this scan found, and leave the existing ones alone.
  *
- * Claude enrichment runs only for brands being created — the name and summary
- * do not change once set, so re-running it every hour would spend money to
- * learn nothing.
+ * A form submission tells us the company, the contact and what they want, so
+ * there is nothing to guess at — every submission lands as a confirmed brand.
+ * Claude is asked for a tidier one-line summary when a key is configured, and
+ * only ever on creation.
  */
 async function upsertBrands(
-  groups: Map<string, { candidate: BrandCandidate; threads: ScannedThread[]; blocked: boolean }>,
+  groups: Map<string, { candidate: BrandCandidate | null; threads: ScannedThread[]; blocked: boolean }>,
   counters: Counters,
 ): Promise<Map<string, string>> {
   const db = supabaseAdmin();
   const keys = [...groups.keys()];
 
-  const { data: existing } = await db
-    .from("brands")
-    .select("id, group_key")
-    .in("group_key", keys);
+  const { data: existing } = await db.from("brands").select("id, group_key").in("group_key", keys);
 
   const idByKey = new Map<string, string>(
     (existing ?? []).map((row) => [String(row.group_key), String(row.id)]),
   );
 
-  const toCreate = keys.filter((key) => !idByKey.has(key));
+  // A thread can only create a brand if it carried a submission. An "attach"
+  // for a brand that has since been deleted simply has nowhere to go.
+  const toCreate = keys.filter((key) => !idByKey.has(key) && groups.get(key)?.candidate);
   if (toCreate.length === 0) return idByKey;
 
   const rows = await mapWithConcurrency(toCreate, 4, async (key) => {
     const group = groups.get(key)!;
-    const { candidate } = group;
+    const candidate = group.candidate!;
 
-    // A do-not-contact entity is recorded but kept off the board entirely.
     if (group.blocked) {
       return {
         group_key: key,
@@ -469,25 +493,22 @@ async function upsertBrands(
       };
     }
 
+    const fromFields = summaryFromForm(candidate);
     const enrichment = await enrichWithClaude(candidate);
 
     return {
       group_key: key,
-      name: enrichment?.brandName ?? candidate.name,
+      name: candidate.name,
       domain: candidate.domain,
       website: candidate.domain ? `https://${candidate.domain}` : null,
       primary_contact_email: candidate.contactEmail,
-      primary_contact_name: enrichment?.contactName ?? candidate.contactName,
-      // Claude saying "not a brand inquiry" archives it rather than deleting
-      // it, so a wrong call is one click to undo instead of lost.
-      classification: enrichment
-        ? enrichment.isBrandInquiry
-          ? ("brand" as const)
-          : ("dismissed" as const)
-        : ("unverified" as const),
-      confidence: enrichment?.confidence ?? null,
-      summary: enrichment?.summary ?? null,
-      archived: enrichment ? !enrichment.isBrandInquiry : false,
+      primary_contact_name: candidate.contactName,
+      // The form is the agency's own front door, so a submission is a brand by
+      // definition — nothing here needs a human to confirm it is real.
+      classification: "brand" as const,
+      confidence: 1,
+      summary: enrichment?.summary ?? fromFields,
+      archived: false,
     };
   });
 
@@ -498,9 +519,7 @@ async function upsertBrands(
 
   if (error) throw new Error(`Creating brands failed: ${error.message}`);
 
-  for (const row of created ?? []) {
-    idByKey.set(String(row.group_key), String(row.id));
-  }
+  for (const row of created ?? []) idByKey.set(String(row.group_key), String(row.id));
 
   counters.brandsCreated += toCreate.length;
   return idByKey;
@@ -510,17 +529,15 @@ async function upsertBrands(
  * Run the stage machine over every brand this scan touched.
  *
  * A stage a person set by hand is left exactly where they put it; when the
- * inbox disagrees, `auto_stage` records the disagreement and the card shows it
- * as a suggestion to accept.
+ * inbox disagrees, `auto_stage` records the disagreement and the card offers
+ * it as a suggestion to accept.
  */
 async function applyStages(brandIds: string[]): Promise<number> {
   const db = supabaseAdmin();
 
   const { data: brands } = await db
     .from("brands")
-    .select(
-      "id, stage, stage_source, last_direction, last_outbound_at, archived, auto_stage",
-    )
+    .select("id, stage, stage_source, last_direction, last_outbound_at, archived, auto_stage")
     .in("id", brandIds);
 
   let changed = 0;
@@ -530,8 +547,7 @@ async function applyStages(brandIds: string[]): Promise<number> {
     BrandRow,
     "id" | "stage" | "stage_source" | "last_direction" | "last_outbound_at" | "archived" | "auto_stage"
   >[]) {
-    if (row.archived) continue;
-    if (!row.last_direction) continue;
+    if (row.archived || !row.last_direction) continue;
 
     const autoStage: Stage = deriveAutoStage({
       lastDirection: row.last_direction,
@@ -571,12 +587,18 @@ async function applyStages(brandIds: string[]): Promise<number> {
   return changed;
 }
 
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    out.push(items.slice(index, index + size));
+  }
+  return out;
+}
+
 async function chunked<T>(
   items: T[],
   size: number,
-  handler: (chunk: T[]) => Promise<void>,
+  handler: (rows: T[]) => Promise<void>,
 ): Promise<void> {
-  for (let index = 0; index < items.length; index += size) {
-    await handler(items.slice(index, index + size));
-  }
+  for (const rows of chunk(items, size)) await handler(rows);
 }

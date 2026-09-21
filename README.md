@@ -49,11 +49,12 @@ npm run dev
 Open **http://localhost:3000**.
 
 With no Supabase configured the app boots in **local mode**: sign-in is off and
-it reads [`seed/pipeline.json`](seed/pipeline.json) instead of a database — 34
-brands from a real scan of the ZMM inbox covering 31 August to 21 September
-2026. The board, the brand pages with their email timelines, moving cards,
-assigning owners, deal values, notes and dismissals all work, and your edits
-persist to `.local-data/db.json`.
+it reads [`seed/pipeline.json`](seed/pipeline.json) instead of a database —
+every submission that came through the collegiateagency.com form between
+31 August and 21 September 2026, six of them, plus the conversation that
+followed each. The board, the brand pages with their email timelines, moving
+cards, assigning owners, deal values, notes and dismissals all work, and your
+edits persist to `.local-data/db.json`.
 
 What local mode cannot do is read live mail — there is no inbox connected, so
 there is no "Scan now". For that you need the setup below.
@@ -180,18 +181,35 @@ coloured, so nothing depends on telling two shades apart.
 moved it between stages and when. Owner, deal value, event tag, and notes are
 filled in there.
 
-**Where leads come from.** Two routes, both automatic:
+**Where leads come from.** One front door: the form at collegiateagency.com.
 
-- **The website form.** Inquiries from zmm.events arrive from the site's own
-  no-reply address, so the sender tells you nothing — the brand, contact, and
-  budget are in the body, and the scan reads them from there. Any mail from a
-  domain you own whose subject contains `FORM_SUBJECT_MATCH` (default
-  "brand inquiry") is treated this way.
-- **Brands emailing you directly.** Anything inbound that survives screening.
+A submission arrives in the inbox as a notification from
+`no-reply@zmmevents.com` (`FORM_SENDER`) with "brand inquiry" in the subject
+(`FORM_SUBJECT_MATCH`). The sender tells you nothing — the company, contact,
+interests and budget are in the body, and the scan reads them from there.
 
-A brand that came in through the form and was then emailed — with no reply yet —
-stays on the board rather than disappearing, because the outbound thread is
-matched back to the brand the form created.
+**Nothing else creates a card.** A brand that emails you directly, a
+newsletter, a vendor pitch — none of it reaches the board. That is the point:
+the previous version guessed at whether an arbitrary inbound email was a lead,
+and guessing is what put newsletters on a sponsorship pipeline.
+
+Both halves of the subject check matter. Ambassador applications come from the
+same no-reply address, and those are students applying to work campus, not
+brands buying.
+
+**After the submission, the scan follows the conversation.** Once a brand is on
+the board, every later thread involving that company's address or domain
+attaches to it — inbound or outbound, on To or Cc, from any colleague at the
+same company. That is what moves a card from New Submission through to a live
+campaign without anyone touching it.
+
+If leads ever start arriving another way, `INTAKE_MODE=form_and_inbound` opens
+the second door.
+
+**Forwarding a lead to your partner is not a reply.** A message only counts as
+answering a brand when someone from that brand is actually on it. Forwarding an
+inquiry to Zach for a second opinion leaves the card where it was, and shows on
+the timeline as an internal note.
 
 **Forwarding a lead to your partner is not a reply.** A message only counts as
 answering a brand when someone from that brand is actually on it. Forwarding an
