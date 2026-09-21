@@ -203,9 +203,6 @@ attaches to it — inbound or outbound, on To or Cc, from any colleague at the
 same company. That is what moves a card from New Submission through to a live
 campaign without anyone touching it.
 
-If leads ever start arriving another way, `INTAKE_MODE=form_and_inbound` opens
-the second door.
-
 **Forwarding a lead to your partner is not a reply.** A message only counts as
 answering a brand when someone from that brand is actually on it. Forwarding an
 inquiry to Zach for a second opinion leaves the card where it was, and shows on
@@ -289,29 +286,33 @@ src/
 
 ## Troubleshooting
 
-**localhost refused to connect / `ERR_CONNECTION_REFUSED`.** Nothing is
-listening on that port on your machine. `npm run dev` has to be running in a
-terminal, and that terminal has to stay open — closing it or pressing Ctrl+C
-stops the server and the page stops loading. There is no hosted URL for local
-mode; it runs on your laptop or not at all.
+**localhost refused to connect / `ERR_CONNECTION_REFUSED`.** Run this first —
+it checks every common cause and tells you which one you have:
 
-Work through these in order:
+```bash
+npm run doctor
+```
 
-1. Are you in the right folder? `pwd` should end in `/Jarvis`, and `ls` should
-   show `package.json`.
-2. Is the server actually up? The terminal should be sitting on
-   `✓ Ready in …` with no prompt back. If it printed an error and returned to
-   the prompt, that error is the real problem.
-3. **Is it on a different port?** If something else already has 3000, Next
-   picks the next free one and prints it — `- Local: http://localhost:3001`.
-   Use the port it prints, not the one in this README.
-4. Use `http://localhost:3000`, not `https://`. There is no certificate on a
-   dev server, and some browsers silently upgrade the URL.
-5. Still nothing? Stop it, then start again and read the first twenty lines:
+It reports your Node version, which folder and branch you are on, whether the
+dependencies and seed are there, and whether something else already owns port
+3000. Paste its output to whoever is helping you.
 
-   ```bash
-   npm run dev
-   ```
+The underlying rule: nothing is listening on that port unless `npm run dev` is
+running in a terminal on your machine, and that terminal stays open. Ctrl+C or
+closing the window stops the server and the page stops loading. There is no
+hosted URL for local mode — it runs on your laptop or not at all.
+
+The four things `doctor` is looking for:
+
+1. **Wrong folder.** `ls` should show `package.json`. If not, `cd` into the
+   Jarvis directory.
+2. **Wrong branch.** The dashboard only exists on
+   `claude/nifty-ride-et5emr`. On `main` there is no app to run.
+3. **Different port.** If something else already has 3000, Next picks the next
+   free one and prints it — `- Local: http://localhost:3001`. Use the port it
+   prints, not the one in this README.
+4. **`https://` instead of `http://`.** There is no certificate on a dev
+   server, and some browsers silently upgrade the URL.
 
 **`npm run dev` exits immediately.** `npm run dev` runs a preflight first; if
 your Node is older than 18.18 it says so and stops, because Next.js 15 will not

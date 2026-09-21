@@ -48,16 +48,6 @@ const FREE_MAIL_DOMAINS = new Set([
   "hey.com",
 ]);
 
-/**
- * Where leads are allowed to come from.
- *
- * `form_only` is the agency's rule: the website form is the front door.
- * `form_and_inbound` also lets a brand that emails in cold create a card, which
- * is how this started out — kept because it is one environment variable away
- * and the cost of being wrong about it is a lead nobody sees.
- */
-export type IntakeMode = "form_only" | "form_and_inbound";
-
 export interface ScreenContext {
   /** Every address that counts as "us" — the connected inbox plus teammates. */
   ownAddresses: Set<string>;
@@ -71,9 +61,6 @@ export interface ScreenContext {
   knownGroupKeys: Set<string>;
   /** Entities under a do-not-contact rule. */
   blocked: Set<string>;
-  /** Senders the team has dismissed. */
-  ignored: Set<string>;
-  intakeMode: IntakeMode;
 }
 
 export interface BrandCandidate {
@@ -191,16 +178,8 @@ export function screenThread(thread: ScannedThread, ctx: ScreenContext): ScreenR
     return { verdict: "attach", reason: `Conversation with ${attached}`, groupKey: attached };
   }
 
-  // 3. Optional second front door, off by default.
-  if (ctx.intakeMode === "form_and_inbound") {
-    const inbound = inboundCandidate(messages, ctx);
-    if (inbound) {
-      return matchesPattern(ctx.blocked, inbound.contactEmail, inbound.domain)
-        ? { verdict: "blocked", reason: "Do-not-contact entity", candidate: inbound }
-        : { verdict: "submission", reason: "Direct inbound (form_and_inbound mode)", candidate: inbound };
-    }
-  }
-
+  // Anything else is not a lead. A brand that emails in cold, a newsletter, a
+  // vendor pitch — none of it reaches the board, by design.
   return { verdict: "skip", reason: "Not a website submission, and no brand on the board" };
 }
 
@@ -301,34 +280,6 @@ function candidateFromForm(
     interests: submission.interests,
     budget: submission.budget,
     firstInbound: message,
-  };
-}
-
-/** Only reachable in `form_and_inbound` mode. */
-function inboundCandidate(
-  messages: ScannedMessage[],
-  ctx: ScreenContext,
-): BrandCandidate | null {
-  const first = messages.find((message) => message.direction === "inbound");
-  if (!first) return null;
-
-  const address = first.fromEmail.toLowerCase();
-  const domain = emailDomain(address);
-  const groupKey = groupKeyFor(address);
-  if (!domain || !groupKey) return null;
-
-  if (isOurs(address, ctx)) return null;
-  if (matchesPattern(ctx.ignored, address, domain)) return null;
-
-  return {
-    groupKey,
-    name: FREE_MAIL_DOMAINS.has(domain) ? (first.fromName ?? address) : nameFromDomain(domain),
-    domain: FREE_MAIL_DOMAINS.has(domain) ? null : rootDomain(domain),
-    contactEmail: address,
-    contactName: first.fromName,
-    interests: null,
-    budget: null,
-    firstInbound: first,
   };
 }
 

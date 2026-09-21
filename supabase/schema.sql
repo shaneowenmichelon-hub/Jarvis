@@ -238,6 +238,10 @@ create index if not exists scan_runs_started_idx on scan_runs (started_at desc);
 -- Recompute the email-derived columns on a set of brands from the messages
 -- table, which is the source of truth.
 --
+-- This must stay in step with `deriveBrandFacts` in src/lib/stages.ts, which
+-- is the same reduction in TypeScript and is what the tests pin down. If you
+-- change one, change the other.
+--
 -- The hourly scan only sees a recent slice of the inbox, so a brand's real
 -- state has to be re-derived from everything on record rather than from the
 -- handful of messages that happened to arrive this hour. Doing it in one

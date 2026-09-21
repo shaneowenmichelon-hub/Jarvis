@@ -73,13 +73,6 @@ export function formSubjectMatch(): string {
   return (process.env.FORM_SUBJECT_MATCH ?? "brand inquiry").trim().toLowerCase();
 }
 
-/**
- * Where leads may come from. The agency's rule is the form only; the other
- * mode is one variable away if a lead ever arrives another way.
- */
-export function intakeMode(): "form_only" | "form_and_inbound" {
-  return process.env.INTAKE_MODE === "form_and_inbound" ? "form_and_inbound" : "form_only";
-}
 
 /** How far back the very first scan reaches. */
 export function backfillDays(): number {

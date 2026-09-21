@@ -27,7 +27,6 @@ import {
   backfillDays,
   formSenders,
   formSubjectMatch,
-  intakeMode,
   ownAddresses,
   ownDomains,
   scanThreadLimit,
@@ -214,8 +213,7 @@ async function scanInbox(
   const since = resolveWindow(account.last_window_at as string | null, options);
   const afterSeconds = Math.floor(since.getTime() / 1000);
 
-  const [ignored, blockedPatterns, knownThreadIds, knownGroupKeys] = await Promise.all([
-    loadPatterns("ignored_senders"),
+  const [blockedPatterns, knownThreadIds, knownGroupKeys] = await Promise.all([
     loadPatterns("blocked_entities"),
     loadKnownThreadIds(),
     loadKnownGroupKeys(),
@@ -228,8 +226,6 @@ async function scanInbox(
     formSubjectMatch: formSubjectMatch(),
     knownGroupKeys,
     blocked: blockedPatterns,
-    ignored,
-    intakeMode: intakeMode(),
   };
 
   // --- ask Gmail for exactly the two sets that matter -------------------
@@ -251,18 +247,6 @@ async function scanInbox(
     for (const id of await listThreadIds(
       accessToken,
       `in:anywhere after:${afterSeconds} {${clause}}`,
-      scanThreadLimit(),
-    )) {
-      threadIds.add(id);
-    }
-  }
-
-  // In the optional inbound mode there is no way to know in advance who might
-  // write in, so that mode — and only that mode — sweeps the inbox.
-  if (ctx.intakeMode === "form_and_inbound") {
-    for (const id of await listThreadIds(
-      accessToken,
-      `in:anywhere -in:chats after:${afterSeconds}`,
       scanThreadLimit(),
     )) {
       threadIds.add(id);
@@ -443,9 +427,19 @@ async function loadKnownThreadIds(): Promise<Set<string>> {
   return new Set((data ?? []).map((row) => String(row.id)));
 }
 
-/** Brands on the board. Their conversations are what step 4 goes looking for. */
+/**
+ * Brands on the board. Their conversations are what step 4 goes looking for.
+ *
+ * Archived brands are excluded, so dismissing one genuinely stops the scan
+ * following it rather than quietly carrying on in the background.
+ */
 async function loadKnownGroupKeys(): Promise<Set<string>> {
-  const { data } = await supabaseAdmin().from("brands").select("group_key").eq("blocked", false);
+  const { data } = await supabaseAdmin()
+    .from("brands")
+    .select("group_key")
+    .eq("blocked", false)
+    .eq("archived", false);
+
   return new Set((data ?? []).map((row) => String(row.group_key)));
 }
 

@@ -18,8 +18,6 @@ const ctx: ScreenContext = {
   formSubjectMatch: "brand inquiry",
   knownGroupKeys: new Set(["thesaltyapp.com", "itsfratflix.com"]),
   blocked: new Set(["cbrands.com"]),
-  ignored: new Set(["substack.com"]),
-  intakeMode: "form_only",
 };
 
 let counter = 0;
@@ -260,34 +258,6 @@ describe("conversations with brands already on the board", () => {
       ctx,
     );
 
-    expect(result.verdict).toBe("skip");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// The optional second front door.
-// ---------------------------------------------------------------------------
-
-describe("form_and_inbound mode", () => {
-  const openCtx: ScreenContext = { ...ctx, intakeMode: "form_and_inbound" };
-
-  it("lets a cold inbound create a brand", () => {
-    const result = screenThread(thread([message()]), openCtx);
-
-    expect(result.verdict).toBe("submission");
-    expect(result.verdict === "submission" && result.candidate.groupKey).toBe("flybyjing.com");
-  });
-
-  it("still skips senders the team has dismissed", () => {
-    const result = screenThread(thread([message({ fromEmail: "hi@substack.com" })]), openCtx);
-    expect(result.verdict).toBe("skip");
-  });
-
-  it("still skips our own people", () => {
-    const result = screenThread(
-      thread([message({ fromEmail: "zach@zmmevents.com" })]),
-      openCtx,
-    );
     expect(result.verdict).toBe("skip");
   });
 });

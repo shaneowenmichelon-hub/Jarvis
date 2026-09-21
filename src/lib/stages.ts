@@ -8,6 +8,68 @@
 
 import type { BrandEmailFacts, Direction, Stage, StageSource } from "./types";
 
+/** The shape the fact-deriver needs. Both a scanned message and a stored row fit. */
+export interface FactMessage {
+  direction: Direction;
+  internal: boolean;
+  sentAt: string;
+}
+
+export interface BrandFacts {
+  firstContactAt: string | null;
+  lastMessageAt: string | null;
+  lastInboundAt: string | null;
+  lastOutboundAt: string | null;
+  lastDirection: Direction | null;
+  everRepliedByUs: boolean;
+  awaitingOurReply: boolean;
+}
+
+/**
+ * Reduce a brand's whole message history to the handful of facts the stage
+ * machine reads.
+ *
+ * Internal messages are excluded throughout: forwarding a lead to a teammate
+ * is not answering the brand, and counting it is what files an unanswered
+ * submission under "waiting on them".
+ *
+ * The production path computes this in SQL — `refresh_brand_facts` in
+ * supabase/schema.sql — because the scan only ever holds a recent slice of the
+ * inbox and the facts have to come from everything on record. The two must
+ * agree; this is the version the tests pin down.
+ */
+export function deriveBrandFacts(messages: FactMessage[]): BrandFacts {
+  const external = messages
+    .filter((message) => !message.internal)
+    .sort((a, b) => a.sentAt.localeCompare(b.sentAt));
+
+  if (external.length === 0) {
+    return {
+      firstContactAt: null,
+      lastMessageAt: null,
+      lastInboundAt: null,
+      lastOutboundAt: null,
+      lastDirection: null,
+      everRepliedByUs: false,
+      awaitingOurReply: false,
+    };
+  }
+
+  const last = external[external.length - 1];
+  const lastOf = (direction: Direction) =>
+    external.filter((message) => message.direction === direction).at(-1)?.sentAt ?? null;
+
+  return {
+    firstContactAt: external[0].sentAt,
+    lastMessageAt: last.sentAt,
+    lastInboundAt: lastOf("inbound"),
+    lastOutboundAt: lastOf("outbound"),
+    lastDirection: last.direction,
+    everRepliedByUs: lastOf("outbound") !== null,
+    awaitingOurReply: last.direction === "inbound",
+  };
+}
+
 /**
  * Where the email state says a brand belongs.
  *
