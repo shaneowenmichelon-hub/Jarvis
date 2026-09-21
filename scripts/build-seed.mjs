@@ -74,6 +74,9 @@ const PIPELINE = [
   {
     key: "yewon.lee@crains.co.kr", name: "Crains — Heveblue", domain: "crains.co.kr",
     contact: "Yewon Lee", email: "yewon.lee@crains.co.kr",
+    // Introduced by Isabelle rather than submitted through the form, so under
+    // the intake rule this card only exists because someone added it by hand.
+    source: "manual",
     submitted: "2026-09-21T07:14:16Z",
     interests: "Product sampling", budget: null,
     summary: "Heveblue, a Korean skincare brand, wants product sampling at New York and East Coast universities in October.",

@@ -52,7 +52,8 @@ With no Supabase configured the app boots in **local mode**: sign-in is off and
 it reads [`seed/pipeline.json`](seed/pipeline.json) instead of a database —
 every submission that came through the collegiateagency.com form between
 31 August and 21 September 2026, six of them, plus the conversation that
-followed each. The board, the brand pages with their email timelines, moving
+followed each, plus two leads that arrived off-website and were added by
+hand. The board, the brand pages with their email timelines, moving
 cards, assigning owners, deal values, notes and dismissals all work, and your
 edits persist to `.local-data/db.json`.
 
