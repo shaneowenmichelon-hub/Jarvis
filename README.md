@@ -230,6 +230,20 @@ newsletter, a vendor pitch — none of it reaches the board. That is the point:
 the previous version guessed at whether an arbitrary inbound email was a lead,
 and guessing is what put newsletters on a sponsorship pipeline.
 
+**Your own submissions do not count.** Testing the form is the first thing
+anyone does with a new site, and those tests look exactly like leads — company
+name, budget, the lot. Two rules catch them:
+
+- anything submitted from an address on `OWN_DOMAINS` (the QA tests)
+- anything submitted from an address in `SELF_SUBMITTERS` — the team's
+  personal addresses, which nothing else would catch
+
+`SELF_SUBMITTERS` is a separate list from `OWN_ADDRESSES` on purpose. It holds
+private addresses, and folding those into the set that decides a message's
+direction would make mail to a founder's personal inbox read as agency mail.
+The same list keeps a founder off the ambassador tab. Add to it whenever
+someone new tests the site.
+
 Both halves of the subject check matter. Ambassador applications come from the
 same no-reply address, and those are students applying to work campus, not
 brands buying.

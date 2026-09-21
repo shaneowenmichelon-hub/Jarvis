@@ -18,6 +18,7 @@
 
 import {
   enrichWithClaude,
+  isOurs,
   screenThread,
   summaryFromForm,
   type BrandCandidate,
@@ -30,6 +31,7 @@ import {
   formSenders,
   formSubjectMatch,
   ownAddresses,
+  selfSubmitters,
   ownDomains,
   scanThreadLimit,
 } from "./env";
@@ -231,6 +233,7 @@ async function scanInbox(
     ownDomains: ownDomains(),
     formSenders: formSenders(),
     formSubjectMatch: formSubjectMatch(),
+    selfSubmitters: selfSubmitters(),
     knownByEmail: known.byEmail,
     knownByDomain: known.byDomain,
     blocked: blockedPatterns,
@@ -313,6 +316,16 @@ async function scanInbox(
     );
 
     if (application) {
+      // Same rule the sponsorship board uses: a form the team filled in
+      // themselves is not a submission. Zach applied to his own ambassador
+      // programme from his old school address on launch day.
+      const email = parseAmbassadorApplication(application).schoolEmail?.toLowerCase();
+
+      if (email && (ctx.selfSubmitters.has(email) || isOurs(email, ctx))) {
+        counters.skipped += 1;
+        continue;
+      }
+
       applications.push(application);
       continue;
     }

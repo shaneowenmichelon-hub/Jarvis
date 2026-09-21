@@ -16,6 +16,7 @@ const ctx: ScreenContext = {
   ownDomains: new Set(["zmmevents.com"]),
   formSenders: new Set(["no-reply@zmmevents.com"]),
   formSubjectMatch: "brand inquiry",
+  selfSubmitters: new Set(["shaneowenmichelon@yahoo.com"]),
   knownByEmail: new Map([
     ["s.angelova@thesaltyapp.com", "thesaltyapp.com"],
     ["cj@itsfratflix.com", "itsfratflix.com"],
@@ -403,5 +404,64 @@ describe("nameFromDomain", () => {
   it("makes a passable starting name", () => {
     expect(nameFromDomain("prizepicks.com")).toBe("Prizepicks");
     expect(nameFromDomain("fly-by-jing.com")).toBe("Fly By Jing");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The team filling in their own form.
+// ---------------------------------------------------------------------------
+
+describe("submissions from the team themselves", () => {
+  it("keeps a personal-address submission off the board", () => {
+    // Verbatim from the real "SOS consultants" inquiry — Shane filling in his
+    // own site from his Yahoo address. Nothing about it looks like a test: a
+    // company name, a budget, and a domain the agency does not own.
+    const result = screenThread(
+      thread([
+        formMail({
+          subject: "New brand inquiry - SOS consultants",
+          body:
+            "Collegiate Agency New brand inquiry Submission First Name Shane Last Name Michelon " +
+            "Company SOS consultants Email shaneowenmichelon@yahoo.com Interests Budget Under 10k",
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("skip");
+    expect(result.reason).toMatch(/personal address/i);
+  });
+
+  it("still lets a real submission from free mail through", () => {
+    // The rule is the specific address, not the fact that it is Yahoo or
+    // Gmail — plenty of founders write in from one.
+    const result = screenThread(
+      thread([
+        formMail({
+          body:
+            "Collegiate Agency New brand inquiry Submission First Name Dana Last Name Reyes " +
+            "Company Reyes Studio Email dana.reyes@gmail.com Interests Brand Ambassadors Budget 25k",
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("submission");
+  });
+
+  it("keeps a QA submission on the agency domain off the board", () => {
+    const result = screenThread(
+      thread([
+        formMail({
+          subject: "New brand inquiry — QA Test (Claude)",
+          body:
+            "Collegiate Agency New brand inquiry Submission First Name Test Last Name Submission " +
+            "Company QA Test (Claude) Email test-qa@zmmevents.com Interests Brand Ambassadors",
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("skip");
   });
 });

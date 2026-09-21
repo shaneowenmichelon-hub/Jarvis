@@ -11,6 +11,11 @@
  * One card here did not come through the form: Triumph arrived off-website and
  * is entered by hand, which is the other half of the intake rule.
  *
+ * Three form submissions are deliberately absent, because the team filled them
+ * in themselves: "SOS consultants" (Shane, from his Yahoo address) and two QA
+ * tests on the agency domain. The scan skips all three at source now, so this
+ * file and an hourly run agree.
+ *
  * Stages are NOT written by hand — this runs the same derivation the hourly
  * scan uses, so the seed cannot drift from the engine.
  *
@@ -116,19 +121,6 @@ const PIPELINE = [
       ["in", "no-reply@zmmevents.com", "New brand inquiry - uhomes.com", "First Name Zimo Last Name Liu Company uhomes.com Email zimo.liu@uhomes.com Phone 2036666079 Interests Budget Not sure yet", "2026-09-15T17:57:33Z", false],
       ["in", "zimo.liu@uhomes.com", "Re: Uhomes x Collegiate Agency", "Confirming the budget range on our side.", "2026-09-21T17:11:46Z", false],
       ["out", "shane@zmmevents.com", "Re: Uhomes x Collegiate Agency", "With this budget in mind ($2000-$3000 per school), we are thinking of a mix of 5-10 ambassadors per school and one on-campus event at a few schools where your brand can…", "2026-09-21T17:19:49Z", false],
-    ],
-  },
-  {
-    key: "shaneowenmichelon@yahoo.com", name: "SOS consultants", domain: null,
-    contact: "Shane Michelon", email: "shaneowenmichelon@yahoo.com",
-    submitted: "2026-09-16T18:50:28Z",
-    interests: null, budget: "Under 10k",
-    summary: "Submitted from your own personal address — this looks like a test of the form.",
-    in: "2026-09-16T18:50:28Z", out: null,
-    threads: 1, messages: 1,
-    note: "Add shaneowenmichelon@yahoo.com to OWN_ADDRESSES and the scan will stop creating this card.",
-    msgs: [
-      ["in", "no-reply@zmmevents.com", "New brand inquiry - SOS consultants", "First Name Shane Last Name Michelon Company SOS consultants Email shaneowenmichelon@yahoo.com Interests Budget Under 10k", "2026-09-16T18:50:28Z", false],
     ],
   },
   {
@@ -269,9 +261,9 @@ PIPELINE.forEach((row, index) => {
  *   Briceida  — forwarded to the team as "new ambassador from organic to onboard"
  *   Rayahna   — forwarded as "please note down we will plan out onboarding soon"
  *
- * The last row is Zach's own submission from launch day, testing the form.
- * It is left on the board rather than quietly dropped, because the hourly scan
- * will find it too — archive it from the card.
+ * Zach's own launch-day submission is not here. He applied to his own
+ * ambassador programme from his old Tulane address while testing the form; the
+ * scan skips it at source, so this file and an hourly run agree.
  */
 const AMBASSADORS = [
   {
@@ -393,17 +385,6 @@ const AMBASSADORS = [
     why: "I want to join because I love connecting with people and discovering brands that fit into my everyday lifestyle. As a college student, I would enjoy representing a brand I genuinely like, creating fun content, and introducing other students to products they may enjoy.",
     stage: "reviewing",
     note: "No campaigns at Wayne State yet — asked whether she can connect us to students at larger campuses nearby.",
-  },
-  {
-    msg: "19fa993d41bf1e74", at: "2026-07-28T16:34:24Z",
-    name: "Zach Maitlin", dob: "2004-07-28", phone: "2017046850",
-    city: "Short Hills", state: "NJ",
-    school: "Tulane", email: "zmaitlin@tulane.edu",
-    grad: "2027", major: "Business Management",
-    ig: "zachmaitlin", tt: null, igf: null, ttf: null,
-    niche: null, why: "I love Celsius",
-    utm: null, landing: "/",
-    note: "Launch-day test of the form, submitted by Zach. Safe to archive.",
   },
 ];
 

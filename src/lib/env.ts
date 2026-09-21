@@ -74,6 +74,28 @@ export function formSubjectMatch(): string {
 }
 
 /**
+ * Team addresses that turn up as form submitters.
+ *
+ * Everyone here has filled in the site's own form at some point — testing that
+ * it works, or signing up to the newsletter to see what lands. None of it is a
+ * lead and none of it is an applicant.
+ *
+ * A test submitted from an agency address is already caught by the own-domain
+ * rule. These are the ones nothing else catches: ordinary personal addresses,
+ * and a founder's old school address on an ambassador form.
+ */
+export function selfSubmitters(): Set<string> {
+  const configured = list(process.env.SELF_SUBMITTERS);
+  if (configured.length > 0) return new Set(configured);
+
+  return new Set([
+    "shaneowenmichelon@yahoo.com",
+    "zachmaitlin@gmail.com",
+    "zmaitlin@tulane.edu",
+  ]);
+}
+
+/**
  * Subject phrase that marks an ambassador application.
  *
  * Same sender as a brand inquiry, so this is the only thing keeping students

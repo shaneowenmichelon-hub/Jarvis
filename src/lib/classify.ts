@@ -74,6 +74,14 @@ export interface ScreenContext {
    * scan log says which address it could not place.
    */
   knownByDomain: Map<string, string>;
+  /**
+   * Team addresses that submit the form themselves.
+   *
+   * Separate from `ownAddresses` on purpose: these are personal addresses, and
+   * folding them into the set that decides a message's direction would make
+   * mail to a founder's private inbox read as agency mail.
+   */
+  selfSubmitters: Set<string>;
   /** Entities under a do-not-contact rule. */
   blocked: Set<string>;
 }
@@ -146,7 +154,7 @@ function matchesPattern(patterns: Set<string>, address: string, domain: string |
   return patterns.has(domain) || patterns.has(rootDomain(domain));
 }
 
-function isOurs(address: string, ctx: ScreenContext): boolean {
+export function isOurs(address: string, ctx: ScreenContext): boolean {
   const normalized = address.toLowerCase();
   if (ctx.ownAddresses.has(normalized)) return true;
 
@@ -175,6 +183,9 @@ export function screenThread(thread: ScannedThread, ctx: ScreenContext): ScreenR
     }
     if (isOurs(candidate.contactEmail, ctx)) {
       return { verdict: "skip", reason: "Form submitted with one of our own addresses" };
+    }
+    if (ctx.selfSubmitters.has(candidate.contactEmail.toLowerCase())) {
+      return { verdict: "skip", reason: "Form submitted by the team from a personal address" };
     }
     if (matchesPattern(ctx.blocked, candidate.contactEmail, candidate.domain)) {
       return {

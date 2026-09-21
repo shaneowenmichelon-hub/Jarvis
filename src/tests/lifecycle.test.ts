@@ -24,6 +24,7 @@ function context(known: string[] = []): ScreenContext {
     ownDomains: new Set(["zmmevents.com"]),
     formSenders: new Set(["no-reply@zmmevents.com"]),
     formSubjectMatch: "brand inquiry",
+    selfSubmitters: new Set(["shaneowenmichelon@yahoo.com"]),
     knownByEmail: new Map(known.filter((k) => k.includes("@")).map((k) => [k, k])),
     knownByDomain: new Map(known.filter((k) => !k.includes("@")).map((k) => [k, k])),
     blocked: new Set(["cbrands.com"]),

@@ -32,7 +32,13 @@ export default async function BoardPage() {
       <Header user={user} lastRun={lastRun} localMode={local} />
       <Tabs pipelineCount={brands.length} ambassadorCount={ambassadors.length} />
 
-      {local && <LocalModeBanner brandCount={brands.length} />}
+      {local && (
+        <LocalModeBanner
+          formCount={brands.filter((brand) => brand.source === "form").length}
+          manualCount={brands.filter((brand) => brand.source !== "form").length}
+          ambassadorCount={ambassadors.length}
+        />
+      )}
       {!local && !inbox && <ConnectPrompt />}
 
       <StatRow brands={brands} />

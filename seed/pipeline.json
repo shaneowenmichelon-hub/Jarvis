@@ -178,41 +178,6 @@
     },
     {
       "id": "seed-06",
-      "group_key": "shaneowenmichelon@yahoo.com",
-      "source": "form",
-      "documents": [],
-      "name": "SOS consultants",
-      "domain": null,
-      "website": null,
-      "primary_contact_name": "Shane Michelon",
-      "primary_contact_email": "shaneowenmichelon@yahoo.com",
-      "stage": "new_submission",
-      "stage_source": "auto",
-      "auto_stage": "new_submission",
-      "stage_changed_at": "2026-09-21T21:00:00.000Z",
-      "stage_changed_by": "hourly scan",
-      "owner_email": null,
-      "first_contact_at": "2026-09-16T18:50:28Z",
-      "last_message_at": "2026-09-16T18:50:28Z",
-      "last_inbound_at": "2026-09-16T18:50:28Z",
-      "last_outbound_at": null,
-      "last_direction": "inbound",
-      "awaiting_our_reply": true,
-      "thread_count": 1,
-      "message_count": 1,
-      "classification": "brand",
-      "confidence": 1,
-      "summary": "Submitted from your own personal address — this looks like a test of the form.",
-      "deal_value": null,
-      "event_tag": null,
-      "notes": "Add shaneowenmichelon@yahoo.com to OWN_ADDRESSES and the scan will stop creating this card.",
-      "blocked": false,
-      "archived": false,
-      "created_at": "2026-09-16T18:50:28Z",
-      "updated_at": "2026-09-21T21:00:00.000Z"
-    },
-    {
-      "id": "seed-07",
       "group_key": "orbitstudio.us",
       "source": "form",
       "documents": [],
@@ -247,7 +212,7 @@
       "updated_at": "2026-09-21T21:00:00.000Z"
     },
     {
-      "id": "seed-08",
+      "id": "seed-07",
       "group_key": "manual:triumph",
       "source": "manual",
       "documents": [
@@ -661,37 +626,6 @@
       "archived": false,
       "created_at": "2026-08-31T17:01:54Z",
       "updated_at": "2026-08-31T17:01:54Z"
-    },
-    {
-      "id": "amb-13",
-      "source_message_id": "19fa993d41bf1e74",
-      "stage": "applied",
-      "stage_source": "auto",
-      "stage_changed_at": "2026-07-28T16:34:24Z",
-      "stage_changed_by": null,
-      "full_name": "Zach Maitlin",
-      "school": "Tulane",
-      "school_email": "zmaitlin@tulane.edu",
-      "phone": "2017046850",
-      "city": "Short Hills",
-      "state": "NJ",
-      "grad_year": "2027",
-      "major": "Business Management",
-      "dob": "2004-07-28",
-      "instagram": "zachmaitlin",
-      "tiktok": null,
-      "ig_followers": null,
-      "tt_followers": null,
-      "niche": null,
-      "why": "I love Celsius",
-      "utm_source": null,
-      "landing_page": "/",
-      "owner_email": null,
-      "notes": "Launch-day test of the form, submitted by Zach. Safe to archive.",
-      "applied_at": "2026-07-28T16:34:24Z",
-      "archived": false,
-      "created_at": "2026-07-28T16:34:24Z",
-      "updated_at": "2026-07-28T16:34:24Z"
     }
   ],
   "messages": [
@@ -976,22 +910,6 @@
       "from_email": "no-reply@zmmevents.com",
       "from_name": null,
       "to_emails": [
-        "shaneowenmichelon@yahoo.com"
-      ],
-      "cc_emails": [],
-      "subject": "New brand inquiry - SOS consultants",
-      "snippet": "First Name Shane Last Name Michelon Company SOS consultants Email shaneowenmichelon@yahoo.com Interests Budget Under 10k",
-      "sent_at": "2026-09-16T18:50:28Z"
-    },
-    {
-      "id": "seed-07-m1",
-      "thread_id": "seed-07-t1",
-      "brand_id": "seed-07",
-      "direction": "in",
-      "internal": false,
-      "from_email": "no-reply@zmmevents.com",
-      "from_name": null,
-      "to_emails": [
         "vrajpatel@orbitstudio.us"
       ],
       "cc_emails": [],
@@ -1000,9 +918,9 @@
       "sent_at": "2026-09-21T15:33:23Z"
     },
     {
-      "id": "seed-07-m2",
-      "thread_id": "seed-07-t1",
-      "brand_id": "seed-07",
+      "id": "seed-06-m2",
+      "thread_id": "seed-06-t1",
+      "brand_id": "seed-06",
       "direction": "out",
       "internal": false,
       "from_email": "shane@zmmevents.com",
@@ -1071,16 +989,6 @@
       "id": 6,
       "brand_id": "seed-06",
       "from_stage": null,
-      "to_stage": "new_submission",
-      "source": "auto",
-      "actor": "hourly scan",
-      "note": "Created from a website submission",
-      "created_at": "2026-09-16T18:50:28Z"
-    },
-    {
-      "id": 7,
-      "brand_id": "seed-07",
-      "from_stage": null,
       "to_stage": "awaiting_feedback",
       "source": "auto",
       "actor": "hourly scan",
@@ -1088,8 +996,8 @@
       "created_at": "2026-09-21T15:33:23Z"
     },
     {
-      "id": 8,
-      "brand_id": "seed-08",
+      "id": 7,
+      "brand_id": "seed-07",
       "from_stage": null,
       "to_stage": "awaiting_feedback",
       "source": "manual",
@@ -1107,11 +1015,11 @@
       "finished_at": "2026-09-21T21:00:00.000Z",
       "window_start": "2026-08-31T00:00:00.000Z",
       "threads_seen": 27,
-      "messages_seen": 20,
-      "brands_created": 8,
-      "ambassadors_created": 13,
+      "messages_seen": 19,
+      "brands_created": 7,
+      "ambassadors_created": 12,
       "brands_updated": 0,
-      "stages_changed": 8,
+      "stages_changed": 7,
       "skipped": 11,
       "error": null
     }
