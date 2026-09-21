@@ -16,7 +16,14 @@ import {
 } from "./local-store";
 import { groupKeyFor } from "./classify";
 import { supabaseAdmin } from "./supabase/admin";
-import type { BrandDocument, BrandRow, MessageRow, ScanRunRow, Stage } from "./types";
+import type {
+  AmbassadorRow,
+  BrandDocument,
+  BrandRow,
+  MessageRow,
+  ScanRunRow,
+  Stage,
+} from "./types";
 
 export type { InboxRow, PatternRow, StageEventRow };
 
@@ -359,4 +366,54 @@ export async function removeIgnoredSender(pattern: string): Promise<void> {
   }
 
   await supabaseAdmin().from("ignored_senders").delete().eq("pattern", pattern);
+}
+
+// ---------------------------------------------------------------------------
+// Ambassadors
+//
+// Students applying to work campus. A separate list from the pipeline on
+// purpose — an applicant is not a lead.
+// ---------------------------------------------------------------------------
+
+export async function listAmbassadors(): Promise<AmbassadorRow[]> {
+  if (isLocalMode()) {
+    const db = await readDatabase();
+    return (db.ambassadors ?? [])
+      .filter((ambassador) => !ambassador.archived)
+      .sort((a, b) => b.applied_at.localeCompare(a.applied_at));
+  }
+
+  const { data } = await supabaseAdmin()
+    .from("ambassadors")
+    .select("*")
+    .eq("archived", false)
+    .order("applied_at", { ascending: false });
+
+  return (data ?? []) as AmbassadorRow[];
+}
+
+export async function getAmbassador(id: string): Promise<AmbassadorRow | null> {
+  if (isLocalMode()) {
+    const db = await readDatabase();
+    return (db.ambassadors ?? []).find((ambassador) => ambassador.id === id) ?? null;
+  }
+
+  const { data } = await supabaseAdmin().from("ambassadors").select("*").eq("id", id).maybeSingle();
+  return (data as AmbassadorRow | null) ?? null;
+}
+
+export async function updateAmbassador(
+  id: string,
+  patch: Record<string, unknown>,
+): Promise<void> {
+  if (isLocalMode()) {
+    await mutate((db) => {
+      const ambassador = (db.ambassadors ?? []).find((row) => row.id === id);
+      if (ambassador) Object.assign(ambassador, patch);
+    });
+    return;
+  }
+
+  const { error } = await supabaseAdmin().from("ambassadors").update(patch).eq("id", id);
+  if (error) throw new Error(error.message);
 }

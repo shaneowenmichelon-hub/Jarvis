@@ -239,6 +239,8 @@ create table if not exists scan_runs (
   error           text
 );
 
+alter table scan_runs add column if not exists ambassadors_created integer not null default 0;
+
 create index if not exists scan_runs_started_idx on scan_runs (started_at desc);
 
 
@@ -291,6 +293,62 @@ $$;
 
 
 -- ---------------------------------------------------------------------------
+-- Ambassadors.
+--
+-- Students applying to work campus, through the same website form that sends
+-- brand inquiries and told apart by the subject. They are kept in their own
+-- table rather than on the pipeline board on purpose: an applicant is not a
+-- lead, and mixing them makes a sponsorship board unreadable.
+-- ---------------------------------------------------------------------------
+do $$ begin
+  create type ambassador_stage as enum ('applied', 'reviewing', 'onboarded', 'active');
+exception when duplicate_object then null; end $$;
+
+create table if not exists ambassadors (
+  id                uuid primary key default gen_random_uuid(),
+  -- The application's Gmail message id. Unique, so re-reading the same window
+  -- cannot create the same student twice.
+  source_message_id text unique,
+
+  stage             ambassador_stage not null default 'applied',
+  stage_source      stage_source not null default 'auto',
+  stage_changed_at  timestamptz not null default now(),
+  stage_changed_by  text,
+
+  full_name         text not null,
+  school            text,
+  school_email      text,
+  phone             text,
+  city              text,
+  state             text,
+  grad_year         text,
+  major             text,
+  dob               text,
+
+  instagram         text,
+  tiktok            text,
+  ig_followers      integer,
+  tt_followers      integer,
+  niche             text,
+  why               text,
+
+  utm_source        text,
+  landing_page      text,
+
+  owner_email       text,
+  notes             text,
+  applied_at        timestamptz not null default now(),
+  archived          boolean not null default false,
+  created_at        timestamptz not null default now(),
+  updated_at        timestamptz not null default now()
+);
+
+create index if not exists ambassadors_stage_idx  on ambassadors (stage) where archived = false;
+create index if not exists ambassadors_school_idx on ambassadors (school);
+create index if not exists ambassadors_applied_idx on ambassadors (applied_at desc);
+
+
+-- ---------------------------------------------------------------------------
 -- Row level security.
 --
 -- The browser never talks to Postgres directly — every read and write goes
@@ -309,6 +367,7 @@ alter table stage_events     enable row level security;
 alter table ignored_senders  enable row level security;
 alter table blocked_entities enable row level security;
 alter table scan_runs        enable row level security;
+alter table ambassadors      enable row level security;
 
 
 -- ---------------------------------------------------------------------------

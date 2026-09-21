@@ -23,7 +23,9 @@ import {
   type BrandCandidate,
   type ScreenContext,
 } from "./classify";
+import { isAmbassadorApplication, parseAmbassadorApplication } from "./ambassadors";
 import {
+  ambassadorSubjectMatch,
   backfillDays,
   formSenders,
   formSubjectMatch,
@@ -59,6 +61,7 @@ export interface ScanSummary {
   brandsUpdated: number;
   stagesChanged: number;
   skipped: number;
+  ambassadorsCreated: number;
   windowStart: string | null;
   error?: string;
 }
@@ -88,6 +91,7 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
       brandsUpdated: 0,
       stagesChanged: 0,
       skipped: 0,
+      ambassadorsCreated: 0,
       windowStart: null,
       error: "A scan is already running",
     };
@@ -111,6 +115,7 @@ export async function runScan(options: ScanOptions): Promise<ScanSummary> {
     brandsUpdated: 0,
     stagesChanged: 0,
     skipped: 0,
+    ambassadorsCreated: 0,
   };
   let windowStart: string | null = null;
 
@@ -153,6 +158,7 @@ interface Counters {
   brandsUpdated: number;
   stagesChanged: number;
   skipped: number;
+  ambassadorsCreated: number;
 }
 
 function snakeCounters(c: Counters) {
@@ -163,6 +169,7 @@ function snakeCounters(c: Counters) {
     brands_updated: c.brandsUpdated,
     stages_changed: c.stagesChanged,
     skipped: c.skipped,
+    ambassadors_created: c.ambassadorsCreated,
   };
 }
 
@@ -290,9 +297,23 @@ async function scanInbox(
     }
   };
 
+  // Ambassador applications ride in on the same query as brand inquiries —
+  // same sender, different subject. They are pulled out before brand screening
+  // so a student can never reach the sponsorship board.
+  const applications: ScannedMessage[] = [];
+
   for (const thread of threads) {
     if (!thread) {
       counters.skipped += 1;
+      continue;
+    }
+
+    const application = thread.messages.find((message) =>
+      isAmbassadorApplication(message, ctx.formSenders, ambassadorSubjectMatch()),
+    );
+
+    if (application) {
+      applications.push(application);
       continue;
     }
 
@@ -312,6 +333,8 @@ async function scanInbox(
         counters.skipped += 1;
     }
   }
+
+  counters.ambassadorsCreated = await saveAmbassadors(applications);
 
   if (groups.size === 0) {
     await db
@@ -615,6 +638,71 @@ async function applyStages(brandIds: string[]): Promise<number> {
   }
 
   return changed;
+}
+
+/**
+ * Record ambassador applications.
+ *
+ * Keyed on the application's Gmail message id, so the overlapping scan window
+ * re-reading the same week cannot create the same student twice. Existing rows
+ * are left alone — the form only ever fires once per applicant, and whatever
+ * the team has done to the row since is theirs.
+ */
+async function saveAmbassadors(applications: ScannedMessage[]): Promise<number> {
+  if (applications.length === 0) return 0;
+
+  const db = supabaseAdmin();
+  const ids = applications.map((message) => message.id);
+
+  const { data: existing } = await db
+    .from("ambassadors")
+    .select("source_message_id")
+    .in("source_message_id", ids);
+
+  const seen = new Set((existing ?? []).map((row) => String(row.source_message_id)));
+  const fresh = applications.filter((message) => !seen.has(message.id));
+  if (fresh.length === 0) return 0;
+
+  const rows = fresh
+    .map((message) => {
+      const parsed = parseAmbassadorApplication(message);
+      // A row with no name is unusable; better to skip it and leave the
+      // application in the inbox than to put a blank card in the list.
+      if (!parsed.fullName) return null;
+
+      return {
+        source_message_id: message.id,
+        stage: "applied" as const,
+        full_name: parsed.fullName,
+        school: parsed.school,
+        school_email: parsed.schoolEmail,
+        phone: parsed.phone,
+        city: parsed.city,
+        state: parsed.state,
+        grad_year: parsed.gradYear,
+        major: parsed.major,
+        dob: parsed.dob,
+        instagram: parsed.instagram,
+        tiktok: parsed.tiktok,
+        ig_followers: parsed.igFollowers,
+        tt_followers: parsed.ttFollowers,
+        niche: parsed.niche,
+        why: parsed.why,
+        utm_source: parsed.utmSource,
+        landing_page: parsed.landingPage,
+        applied_at: message.sentAt,
+      };
+    })
+    .filter((row): row is NonNullable<typeof row> => row !== null);
+
+  if (rows.length === 0) return 0;
+
+  const { error } = await db
+    .from("ambassadors")
+    .upsert(rows, { onConflict: "source_message_id", ignoreDuplicates: true });
+
+  if (error) throw new Error(`Saving ambassadors failed: ${error.message}`);
+  return rows.length;
 }
 
 function chunk<T>(items: T[], size: number): T[][] {

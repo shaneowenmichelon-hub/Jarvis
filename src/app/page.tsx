@@ -4,8 +4,15 @@ import Board from "@/components/Board";
 import Header from "@/components/Header";
 import LocalModeBanner from "@/components/LocalModeBanner";
 import StatRow from "@/components/StatRow";
+import Tabs from "@/components/Tabs";
 import { requireUser } from "@/lib/auth";
-import { activeInbox, isLocalMode, latestScanRun, listBoardBrands } from "@/lib/data";
+import {
+  activeInbox,
+  isLocalMode,
+  latestScanRun,
+  listAmbassadors,
+  listBoardBrands,
+} from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -13,15 +20,17 @@ export default async function BoardPage() {
   const user = await requireUser();
   const local = isLocalMode();
 
-  const [brands, lastRun, inbox] = await Promise.all([
+  const [brands, lastRun, inbox, ambassadors] = await Promise.all([
     listBoardBrands(),
     latestScanRun(),
     activeInbox(),
+    listAmbassadors(),
   ]);
 
   return (
     <main className="page">
       <Header user={user} lastRun={lastRun} localMode={local} />
+      <Tabs pipelineCount={brands.length} ambassadorCount={ambassadors.length} />
 
       {local && <LocalModeBanner brandCount={brands.length} />}
       {!local && !inbox && <ConnectPrompt />}

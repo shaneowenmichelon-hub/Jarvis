@@ -4,6 +4,15 @@ Inbound sponsorship pipeline for ZMM Events. Reads the agency inbox once an
 hour and keeps a shared board of every brand that has written in, so nobody has
 to remember who is owed a reply.
 
+Two tabs, one inbox behind both:
+
+- **Pipeline** — brands that submitted the form at collegiateagency.com
+- **Ambassadors** — students who applied to work campus
+
+Both arrive from the same address, `no-reply@zmmevents.com`, and are told apart
+by subject. They stay apart on purpose: a student applying to work is not a
+company buying, and mixing them is what makes a sponsorship board useless.
+
 Built for Shane Michelon and the ZMM team.
 
 ---
@@ -31,6 +40,33 @@ One exception worth knowing: a brand in **Active Campaign** that has an
 unanswered email gets a red *"They are waiting on your reply"* badge rather
 than being dragged backwards out of the campaign. It is still a running
 campaign; you just owe them a message.
+
+---
+
+## Ambassadors
+
+The second tab is a list, not a board — recruiting is read top to bottom, not
+dragged left to right. Each row carries school, grad year, major, both handles
+with their follower counts, niche, and the applicant's own answer to why they
+want in.
+
+Four stages, and unlike the pipeline **none of them are automatic**:
+
+| Stage | What it means |
+|---|---|
+| **Applied** | Came through the form. Nobody has looked yet. |
+| **Reviewing** | Being assessed, or in conversation. |
+| **Onboarded** | Accepted and set up, not yet on a campaign. |
+| **Active** | Working a campaign right now. |
+
+Nothing in an email proves a student was onboarded, so the scan never guesses:
+it creates the row at **Applied** and a person moves it from there. The scan's
+only job here is making sure every application shows up exactly once — rows are
+keyed on the Gmail message id, so a rescan cannot duplicate anybody.
+
+Filters across the top: stage (with live counts), school, and sort by newest or
+by biggest reach. **Archive** on a row keeps the record but takes them off the
+list — for a duplicate, a test submission, or someone who is not a fit.
 
 ---
 
@@ -284,18 +320,21 @@ screening rules that decide what counts as a brand are in
 ```
 src/
 ├── app/
-│   ├── page.tsx              # the board
+│   ├── page.tsx              # the pipeline board
+│   ├── ambassadors/          # the ambassador list
 │   ├── brands/[id]/          # brand detail and email timeline
 │   ├── settings/             # Gmail connection, scan log, skip lists
 │   └── api/
 │       ├── cron/scan/        # the hourly endpoint (bearer token)
 │       ├── scan/             # "Scan now" (signed-in)
 │       ├── gmail/            # one-time OAuth connect
-│       └── brands/[id]/      # stage moves, owner, notes, dismiss
+│       ├── brands/[id]/      # stage moves, owner, notes, dismiss
+│       └── ambassadors/[id]/ # stage moves, owner, archive
 ├── components/
 ├── lib/
 │   ├── stages.ts             # the four areas — pure, tested
 │   ├── classify.ts           # what counts as a brand — pure, tested
+│   ├── ambassadors.ts        # application parsing and stages — pure, tested
 │   ├── gmail.ts              # Gmail REST, no googleapis dependency
 │   └── scan.ts               # the hourly pass, start to finish
 └── tests/

@@ -193,3 +193,47 @@ export interface ScanRunRow {
   skipped: number;
   error: string | null;
 }
+
+/**
+ * A student who applied to work campus through the website form.
+ *
+ * Deliberately separate from a brand: an applicant is not a lead, and putting
+ * the two on one board is what makes a sponsorship pipeline unreadable.
+ */
+export interface AmbassadorRow {
+  id: string;
+  /** Gmail message id of the application, so a rescan cannot duplicate them. */
+  source_message_id: string | null;
+  stage: import("./ambassadors").AmbassadorStage;
+  stage_source: StageSource;
+  stage_changed_at: string;
+  stage_changed_by: string | null;
+
+  full_name: string;
+  school: string | null;
+  school_email: string | null;
+  phone: string | null;
+  city: string | null;
+  state: string | null;
+  grad_year: string | null;
+  major: string | null;
+  dob: string | null;
+
+  instagram: string | null;
+  tiktok: string | null;
+  ig_followers: number | null;
+  tt_followers: number | null;
+  niche: string | null;
+  why: string | null;
+
+  /** Where the applicant came from, so you can see which campaigns recruit. */
+  utm_source: string | null;
+  landing_page: string | null;
+
+  owner_email: string | null;
+  notes: string | null;
+  applied_at: string;
+  archived: boolean;
+  created_at: string;
+  updated_at: string;
+}

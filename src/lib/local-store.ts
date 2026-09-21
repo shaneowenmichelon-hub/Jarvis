@@ -15,7 +15,7 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
-import type { BrandRow, MessageRow, ScanRunRow, Stage, StageSource } from "./types";
+import type { AmbassadorRow, BrandRow, MessageRow, ScanRunRow, Stage, StageSource } from "./types";
 
 export interface StageEventRow {
   id: number;
@@ -46,6 +46,8 @@ export interface PatternRow {
 export interface LocalDatabase {
   scanned_at: string;
   brands: BrandRow[];
+  /** Optional so a seed written before this feature still loads. */
+  ambassadors?: AmbassadorRow[];
   messages: MessageRow[];
   stage_events: StageEventRow[];
   scan_runs: ScanRunRow[];

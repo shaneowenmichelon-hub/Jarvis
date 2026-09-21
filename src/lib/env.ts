@@ -73,6 +73,16 @@ export function formSubjectMatch(): string {
   return (process.env.FORM_SUBJECT_MATCH ?? "brand inquiry").trim().toLowerCase();
 }
 
+/**
+ * Subject phrase that marks an ambassador application.
+ *
+ * Same sender as a brand inquiry, so this is the only thing keeping students
+ * off the sponsorship board.
+ */
+export function ambassadorSubjectMatch(): string {
+  return (process.env.AMBASSADOR_SUBJECT_MATCH ?? "ambassador application").trim().toLowerCase();
+}
+
 
 /** How far back the very first scan reaches. */
 export function backfillDays(): number {
