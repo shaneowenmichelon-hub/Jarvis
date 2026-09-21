@@ -289,6 +289,34 @@ src/
 
 ## Troubleshooting
 
+**localhost refused to connect / `ERR_CONNECTION_REFUSED`.** Nothing is
+listening on that port on your machine. `npm run dev` has to be running in a
+terminal, and that terminal has to stay open — closing it or pressing Ctrl+C
+stops the server and the page stops loading. There is no hosted URL for local
+mode; it runs on your laptop or not at all.
+
+Work through these in order:
+
+1. Are you in the right folder? `pwd` should end in `/Jarvis`, and `ls` should
+   show `package.json`.
+2. Is the server actually up? The terminal should be sitting on
+   `✓ Ready in …` with no prompt back. If it printed an error and returned to
+   the prompt, that error is the real problem.
+3. **Is it on a different port?** If something else already has 3000, Next
+   picks the next free one and prints it — `- Local: http://localhost:3001`.
+   Use the port it prints, not the one in this README.
+4. Use `http://localhost:3000`, not `https://`. There is no certificate on a
+   dev server, and some browsers silently upgrade the URL.
+5. Still nothing? Stop it, then start again and read the first twenty lines:
+
+   ```bash
+   npm run dev
+   ```
+
+**`npm run dev` exits immediately.** `npm run dev` runs a preflight first; if
+your Node is older than 18.18 it says so and stops, because Next.js 15 will not
+run on it. `node --version` to check; Node 20 LTS is a safe choice.
+
 **The board is empty after connecting Gmail.** Press *Scan now* — the first run
 is not automatic. If it finishes with zero brands, check
 **Settings → Recent scans**: a high *skipped* count means the screening rules
