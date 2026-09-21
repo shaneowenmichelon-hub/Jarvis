@@ -63,6 +63,12 @@ let cache: LocalDatabase | null = null;
 let queue: Promise<unknown> = Promise.resolve();
 
 export async function readDatabase(): Promise<LocalDatabase> {
+  // Deleting .local-data is the documented way to start over, and people do it
+  // with the server still running. Without this check the in-memory copy would
+  // survive, the reset would appear to do nothing, and the next edit would
+  // write the old state straight back out.
+  if (cache && !existsSync(DB_PATH)) cache = null;
+
   if (cache) return cache;
 
   if (existsSync(DB_PATH)) {
