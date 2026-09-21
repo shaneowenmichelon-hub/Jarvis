@@ -8,6 +8,8 @@ const ctx: ScreenContext = {
   ownDomains: new Set(["zmmevents.com"]),
   ignored: new Set(["substack.com", "noisy-vendor.com"]),
   blocked: new Set(["cbrands.com"]),
+  knownGroupKeys: new Set(["thesaltyapp.com"]),
+  formSubjectMatch: "brand inquiry",
 };
 
 let counter = 0;
@@ -18,9 +20,11 @@ function message(overrides: Partial<ScannedMessage> = {}): ScannedMessage {
     id: `m${counter}`,
     threadId: "t1",
     direction: "inbound" as Direction,
+    internal: false,
     fromEmail: "maya@flybyjing.com",
     fromName: "Maya Chen",
     toEmails: ["shane@zmmevents.com"],
+    ccEmails: [],
     subject: "Campus activation for the fall",
     snippet: "We'd love to sponsor a few dates on the tour.",
     sentAt: "2026-09-01T10:00:00Z",
@@ -177,6 +181,135 @@ describe("screenThread", () => {
 
   it("skips an empty thread rather than throwing", () => {
     expect(screenThread(thread([]), ctx).verdict).toBe("skip");
+  });
+});
+
+// Found by running the scan against the real ZMM inbox: the agency's website
+// form notifies from its own no-reply address, which the screen rejected twice
+// over. That is the main intake channel.
+describe("website form submissions", () => {
+  const formMail = (overrides: Partial<ScannedMessage> = {}) =>
+    message({
+      fromEmail: "no-reply@zmmevents.com",
+      fromName: null,
+      subject: "New brand inquiry - FlatFlow",
+      headers: {},
+      body:
+        "Collegiate Agency New brand inquiry Submission First Name Vraj Last Name Patel " +
+        "Company FlatFlow Email vrajpatel@orbitstudio.us Phone 8479897408 " +
+        "Interests Brand Ambassadors Budget Under 10k",
+      ...overrides,
+    });
+
+  it("creates a brand from the form's contact, not the no-reply sender", () => {
+    const result = screenThread(thread([formMail()]), ctx);
+
+    expect(result.verdict).toBe("candidate");
+    expect(result.candidate?.contactEmail).toBe("vrajpatel@orbitstudio.us");
+    expect(result.candidate?.groupKey).toBe("orbitstudio.us");
+  });
+
+  it("takes the brand name from the subject", () => {
+    expect(screenThread(thread([formMail()]), ctx).candidate?.name).toBe("FlatFlow");
+  });
+
+  it("pulls the contact's full name out of the body", () => {
+    expect(screenThread(thread([formMail()]), ctx).candidate?.contactName).toBe("Vraj Patel");
+  });
+
+  it("falls back to the snippet when the body was not fetched", () => {
+    const result = screenThread(
+      thread([
+        formMail({
+          body: undefined,
+          snippet: "Submission First Name Vraj Last Name Patel Company FlatFlow Email vrajpatel@orbitstudio.us",
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.candidate?.contactEmail).toBe("vrajpatel@orbitstudio.us");
+  });
+
+  it("still honours do-not-contact rules", () => {
+    const result = screenThread(
+      thread([
+        formMail({
+          subject: "New brand inquiry - Constellation",
+          body: "Company Constellation Email buyer@cbrands.com Budget Over 50k",
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("blocked");
+  });
+
+  it("skips a form notification with no usable address", () => {
+    const result = screenThread(
+      thread([formMail({ body: "Company Mystery Budget Not sure yet", snippet: null })]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("skip");
+  });
+
+  it("leaves ordinary internal mail alone", () => {
+    const result = screenThread(
+      thread([
+        message({ fromEmail: "zach@zmmevents.com", subject: "Collegiate Agency SOP", headers: {} }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("skip");
+    expect(result.reason).toBe("Internal mail");
+  });
+});
+
+// Also found live: a brand that came in through the form, got two emails, and
+// never replied had no inbound message on that thread — so it vanished. That
+// is the lead most worth chasing.
+describe("outbound-only threads", () => {
+  const outboundTo = (address: string) =>
+    message({
+      direction: "outbound",
+      fromEmail: "shane@zmmevents.com",
+      toEmails: [address, "zach@zmmevents.com"],
+      labelIds: ["SENT"],
+      subject: "Collegiate Agency x The Salty App",
+      headers: {},
+    });
+
+  it("attaches to a brand already on the board", () => {
+    const result = screenThread(thread([outboundTo("s.angelova@thesaltyapp.com")]), ctx);
+
+    expect(result.verdict).toBe("candidate");
+    expect(result.candidate?.groupKey).toBe("thesaltyapp.com");
+  });
+
+  it("still skips cold outreach to a brand nobody has heard from", () => {
+    const result = screenThread(thread([outboundTo("someone@brand-we-invented.com")]), ctx);
+
+    expect(result.verdict).toBe("skip");
+    expect(result.reason).toMatch(/outbound-only/);
+  });
+
+  it("does not treat a teammate as the brand", () => {
+    const result = screenThread(
+      thread([
+        message({
+          direction: "outbound",
+          fromEmail: "shane@zmmevents.com",
+          toEmails: ["zach@zmmevents.com"],
+          labelIds: ["SENT"],
+          headers: {},
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("skip");
   });
 });
 

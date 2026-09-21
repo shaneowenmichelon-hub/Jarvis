@@ -18,7 +18,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 
-import type { ScannedMessage, ScannedThread } from "./types";
+import type { FormSubmission, ScannedMessage, ScannedThread } from "./types";
 
 /** Providers where the domain says nothing about which company someone is. */
 const FREE_MAIL_DOMAINS = new Set([
@@ -88,6 +88,17 @@ export interface ScreenContext {
   ignored: Set<string>;
   /** Entities under a do-not-contact rule. */
   blocked: Set<string>;
+  /**
+   * Group keys already on the board. Lets an outbound-only thread attach to a
+   * brand we already know, instead of being dropped as cold outreach.
+   */
+  knownGroupKeys: Set<string>;
+  /**
+   * Lowercased phrase that marks a website-form notification, matched against
+   * the subject. The form mails arrive from our own no-reply address, so
+   * without this they are rejected twice over — as a robot and as internal.
+   */
+  formSubjectMatch: string;
 }
 
 export function emailDomain(address: string): string | null {
@@ -141,10 +152,36 @@ export function screenThread(thread: ScannedThread, ctx: ScreenContext): ScreenR
   }
 
   const inbound = messages.filter((m) => m.direction === "inbound");
+
+  // The agency's own website form notifies us from a no-reply address on our
+  // own domain, so the sender tells us nothing — the brand is in the body.
+  // This is the main intake channel, so it is checked before anything else.
+  const formMessage = messages.find((message) => isFormNotification(message, ctx));
+  if (formMessage) {
+    const submission = parseFormSubmission(formMessage);
+    const candidate = candidateFromForm(submission, formMessage);
+    if (candidate) {
+      return matchesPattern(ctx.blocked, candidate.contactEmail, candidate.domain)
+        ? { verdict: "blocked", reason: `Do-not-contact entity: ${candidate.domain}`, candidate }
+        : { verdict: "candidate", reason: "Website form submission", candidate };
+    }
+    return { verdict: "skip", reason: "Form notification with no usable contact" };
+  }
+
   if (inbound.length === 0) {
-    // Intake is inbound-only: a thread we started that nobody answered is
-    // outreach, not a submission.
-    return { verdict: "skip", reason: "No inbound message — outbound-only thread" };
+    // Intake is inbound-only, with one exception: a thread we started with a
+    // brand already on the board belongs to that brand. Without this, a lead
+    // that came through the form and was then emailed — and never replied —
+    // disappears, which is precisely the lead most worth chasing.
+    const known = outboundRecipientOnBoard(messages, ctx);
+    if (!known) {
+      return { verdict: "skip", reason: "No inbound message — outbound-only thread" };
+    }
+    return {
+      verdict: "candidate",
+      reason: "Outbound thread with a brand already on the board",
+      candidate: known,
+    };
   }
 
   const first = inbound[0];
@@ -209,6 +246,127 @@ export function screenThread(thread: ScannedThread, ctx: ScreenContext): ScreenR
   }
 
   return { verdict: "candidate", reason: "Inbound from a real sender", candidate };
+}
+
+// ---------------------------------------------------------------------------
+// Website form submissions
+// ---------------------------------------------------------------------------
+
+/** Mail from our own site's no-reply address announcing a form submission. */
+export function isFormNotification(message: ScannedMessage, ctx: ScreenContext): boolean {
+  const address = message.fromEmail.toLowerCase();
+  const domain = emailDomain(address);
+  if (!domain) return false;
+
+  const ours = ctx.ownDomains.has(domain) || ctx.ownDomains.has(rootDomain(domain));
+  if (!ours) return false;
+
+  const subject = (message.subject ?? "").toLowerCase();
+  return subject.includes(ctx.formSubjectMatch);
+}
+
+/**
+ * Pull the brand out of a form notification.
+ *
+ * The subject carries the company name ("New brand inquiry - FlatFlow") and
+ * the body carries labelled fields. Both are best-effort: a form that gets
+ * redesigned should degrade to a card someone confirms by hand, never to a
+ * lead silently dropped.
+ */
+export function parseFormSubmission(message: ScannedMessage): FormSubmission {
+  const body = (message.body ?? message.snippet ?? "").replace(/\s+/g, " ").trim();
+
+  const field = (label: string, stopAt: string[]): string | null => {
+    const stop = stopAt.map((word) => word.replace(/\s/g, "\\s+")).join("|");
+    const pattern = new RegExp(`${label.replace(/\s/g, "\\s+")}\\s+(.+?)\\s*(?:${stop}|$)`, "i");
+    const match = body.match(pattern);
+    const value = match?.[1]?.trim();
+    return value && value.length < 120 ? value : null;
+  };
+
+  const LABELS = ["First Name", "Last Name", "Company", "Email", "Phone", "Interests", "Budget"];
+  const others = (self: string) => LABELS.filter((label) => label !== self);
+
+  // The subject is the most reliable source for the company.
+  const subjectCompany = (message.subject ?? "").match(/[-–—]\s*(.+?)\s*$/)?.[1]?.trim() ?? null;
+
+  const firstName = field("First Name", others("First Name"));
+  const lastName = field("Last Name", others("Last Name"));
+  const contactName = [firstName, lastName].filter(Boolean).join(" ") || null;
+
+  // Take the address from the labelled field, falling back to the first one in
+  // the body that is not ours.
+  const labelled = field("Email", others("Email"));
+  const contactEmail =
+    labelled && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(labelled)
+      ? labelled.toLowerCase()
+      : (body.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)?.[0]?.toLowerCase() ?? null);
+
+  return {
+    company: subjectCompany || field("Company", others("Company")),
+    contactName,
+    contactEmail,
+    budget: field("Budget", others("Budget")),
+    interests: field("Interests", others("Interests")),
+  };
+}
+
+function candidateFromForm(
+  submission: FormSubmission,
+  message: ScannedMessage,
+): BrandCandidate | null {
+  const address = submission.contactEmail;
+  if (!address) return null;
+
+  const domain = emailDomain(address);
+  if (!domain) return null;
+
+  const isFreeMail = FREE_MAIL_DOMAINS.has(domain);
+
+  return {
+    groupKey: isFreeMail ? address : rootDomain(domain),
+    name: submission.company ?? (isFreeMail ? address : nameFromDomain(domain)),
+    domain: isFreeMail ? null : rootDomain(domain),
+    contactEmail: address,
+    contactName: submission.contactName,
+    firstInbound: message,
+  };
+}
+
+/**
+ * For a thread with no inbound message: is anyone we wrote to already a brand
+ * on the board? If so the thread is theirs.
+ */
+function outboundRecipientOnBoard(
+  messages: ScannedMessage[],
+  ctx: ScreenContext,
+): BrandCandidate | null {
+  for (const message of messages) {
+    for (const address of [...message.toEmails, ...message.ccEmails]) {
+      const normalized = address.toLowerCase();
+      if (ctx.ownAddresses.has(normalized)) continue;
+
+      const domain = emailDomain(normalized);
+      if (!domain) continue;
+      if (ctx.ownDomains.has(domain) || ctx.ownDomains.has(rootDomain(domain))) continue;
+
+      const isFreeMail = FREE_MAIL_DOMAINS.has(domain);
+      const groupKey = isFreeMail ? normalized : rootDomain(domain);
+
+      if (!ctx.knownGroupKeys.has(groupKey)) continue;
+
+      return {
+        groupKey,
+        name: isFreeMail ? normalized : nameFromDomain(domain),
+        domain: isFreeMail ? null : rootDomain(domain),
+        contactEmail: normalized,
+        contactName: null,
+        firstInbound: message,
+      };
+    }
+  }
+
+  return null;
 }
 
 function lowercaseHeaders(headers: Record<string, string>): Record<string, string> {

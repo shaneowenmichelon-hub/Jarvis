@@ -145,6 +145,24 @@ coloured, so nothing depends on telling two shades apart.
 moved it between stages and when. Owner, deal value, event tag, and notes are
 filled in there.
 
+**Where leads come from.** Two routes, both automatic:
+
+- **The website form.** Inquiries from zmm.events arrive from the site's own
+  no-reply address, so the sender tells you nothing — the brand, contact, and
+  budget are in the body, and the scan reads them from there. Any mail from a
+  domain you own whose subject contains `FORM_SUBJECT_MATCH` (default
+  "brand inquiry") is treated this way.
+- **Brands emailing you directly.** Anything inbound that survives screening.
+
+A brand that came in through the form and was then emailed — with no reply yet —
+stays on the board rather than disappearing, because the outbound thread is
+matched back to the brand the form created.
+
+**Forwarding a lead to your partner is not a reply.** A message only counts as
+answering a brand when someone from that brand is actually on it. Forwarding an
+inquiry to Zach for a second opinion leaves the card exactly where it was, and
+shows on the timeline as an internal note.
+
 **Triaging noise.** The scan is deliberately cautious: it drops obvious
 newsletters, no-reply robots, promotions, and anything Google filed as bulk,
 then puts the rest on the board. A card that arrives unconfirmed shows

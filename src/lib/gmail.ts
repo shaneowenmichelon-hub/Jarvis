@@ -229,6 +229,8 @@ export interface FetchThreadOptions {
   withBody: boolean;
   /** Every address that counts as "us", lowercased. */
   ownAddresses: Set<string>;
+  /** Domains we own, so a forward to a teammate is recognised as internal. */
+  ownDomains: Set<string>;
 }
 
 export async function fetchThread(
@@ -258,7 +260,7 @@ export async function fetchThread(
   return {
     id: raw.id,
     messages: (raw.messages ?? []).map((message) =>
-      parseMessage(message, options.ownAddresses, options.withBody),
+      parseMessage(message, options.ownAddresses, options.ownDomains, options.withBody),
     ),
   };
 }
@@ -291,19 +293,26 @@ export async function mapWithConcurrency<T, R>(
 export function parseMessage(
   message: RawMessage,
   ownAddresses: Set<string>,
+  ownDomains: Set<string>,
   withBody: boolean,
 ): ScannedMessage {
   const headers = headerMap(message.payload?.headers ?? []);
   const from = parseAddress(headers["from"] ?? "");
   const labelIds = message.labelIds ?? [];
 
+  const direction = directionOf(labelIds, from.email, ownAddresses);
+  const toEmails = parseAddressList(headers["to"] ?? "");
+  const ccEmails = parseAddressList(headers["cc"] ?? "");
+
   return {
     id: message.id,
     threadId: message.threadId,
-    direction: directionOf(labelIds, from.email, ownAddresses),
+    direction,
+    internal: direction === "outbound" && !reachesOutside([...toEmails, ...ccEmails], ownAddresses, ownDomains),
     fromEmail: from.email,
     fromName: from.name,
-    toEmails: parseAddressList(headers["to"] ?? ""),
+    toEmails,
+    ccEmails,
     subject: headers["subject"] ?? null,
     snippet: decodeEntities(message.snippet ?? "") || null,
     sentAt: new Date(Number(message.internalDate ?? 0)).toISOString(),
@@ -311,6 +320,31 @@ export function parseMessage(
     headers,
     ...(withBody ? { body: extractPlainText(message.payload) } : {}),
   };
+}
+
+/**
+ * Did this message actually leave the building?
+ *
+ * A message addressed only to teammates has not answered anyone outside, no
+ * matter that Gmail stamped it SENT.
+ */
+export function reachesOutside(
+  recipients: string[],
+  ownAddresses: Set<string>,
+  ownDomains: Set<string>,
+): boolean {
+  return recipients.some((address) => {
+    const normalized = address.toLowerCase();
+    if (ownAddresses.has(normalized)) return false;
+
+    const at = normalized.lastIndexOf("@");
+    if (at === -1) return true;
+
+    const domain = normalized.slice(at + 1);
+    if (ownDomains.has(domain)) return false;
+    // A subdomain of one of ours is still ours.
+    return ![...ownDomains].some((own) => domain.endsWith(`.${own}`));
+  });
 }
 
 /**

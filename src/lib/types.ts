@@ -57,9 +57,20 @@ export interface ScannedMessage {
   id: string;
   threadId: string;
   direction: Direction;
+  /**
+   * An outbound message that went only to our own people — forwarding a lead
+   * to a partner for a second opinion, for instance.
+   *
+   * It is still recorded, because it is part of the story of the deal, but it
+   * must never count as having answered the brand. Treating a forward as a
+   * reply is how a lead nobody has responded to ends up filed under "waiting
+   * on them".
+   */
+  internal: boolean;
   fromEmail: string;
   fromName: string | null;
   toEmails: string[];
+  ccEmails: string[];
   subject: string | null;
   snippet: string | null;
   sentAt: string; // ISO
@@ -68,6 +79,20 @@ export interface ScannedMessage {
   headers: Record<string, string>;
   /** Only populated for threads being classified for the first time. */
   body?: string;
+}
+
+/**
+ * A submission from the agency's own website form.
+ *
+ * These arrive from the site's no-reply address rather than from the brand, so
+ * the sender says nothing useful — the real contact is in the body.
+ */
+export interface FormSubmission {
+  company: string | null;
+  contactName: string | null;
+  contactEmail: string | null;
+  budget: string | null;
+  interests: string | null;
 }
 
 export interface ScannedThread {
@@ -122,9 +147,11 @@ export interface MessageRow {
   thread_id: string;
   brand_id: string;
   direction: Direction;
+  internal: boolean;
   from_email: string | null;
   from_name: string | null;
   to_emails: string[] | null;
+  cc_emails: string[] | null;
   subject: string | null;
   snippet: string | null;
   sent_at: string;

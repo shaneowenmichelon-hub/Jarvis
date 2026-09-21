@@ -146,14 +146,24 @@ create table if not exists messages (
   thread_id   text not null references threads (id) on delete cascade,
   brand_id    uuid not null references brands (id) on delete cascade,
   direction   message_direction not null,
+  -- An outbound message that went only to our own people: forwarding a lead
+  -- to a partner for a second opinion. Kept for the timeline, but it never
+  -- counts as having answered the brand — otherwise a forward reads as a
+  -- reply and a lead nobody has responded to lands under "waiting on them".
+  internal    boolean not null default false,
   from_email  text,
   from_name   text,
   to_emails   text[],
+  cc_emails   text[],
   subject     text,
   snippet     text,
   sent_at     timestamptz not null,
   created_at  timestamptz not null default now()
 );
+
+-- Added after the first run against a live inbox; safe on a fresh database.
+alter table messages add column if not exists internal  boolean not null default false;
+alter table messages add column if not exists cc_emails text[];
 
 create index if not exists messages_brand_idx  on messages (brand_id, sent_at desc);
 create index if not exists messages_thread_idx on messages (thread_id, sent_at asc);
@@ -259,6 +269,9 @@ as $$
       count(distinct thread_id)                                 as threads
     from messages
     where brand_id = any(ids)
+      -- Internal forwards are not replies. Counting them here is what puts an
+      -- unanswered lead in "Awaiting Feedback".
+      and internal = false
     group by brand_id
   ) m
   where b.id = m.brand_id;

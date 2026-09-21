@@ -165,7 +165,11 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
                     style={{
                       padding: "10px 12px",
                       borderLeft: `3px solid ${
-                        message.direction === "inbound" ? "var(--ball-us)" : "var(--ball-them)"
+                        message.internal
+                          ? "var(--border-strong)"
+                          : message.direction === "inbound"
+                            ? "var(--ball-us)"
+                            : "var(--ball-them)"
                       }`,
                     }}
                   >
@@ -184,7 +188,13 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
                       ) : (
                         <ArrowUpRight size={12} />
                       )}
-                      <span>{message.direction === "inbound" ? "They wrote" : "We wrote"}</span>
+                      <span>
+                        {message.direction === "inbound"
+                          ? "They wrote"
+                          : message.internal
+                            ? "Internal note"
+                            : "We wrote"}
+                      </span>
                       <span>·</span>
                       <span>{dateTime(message.sent_at)}</span>
                       {message.from_email && (

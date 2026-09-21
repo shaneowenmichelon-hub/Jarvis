@@ -51,6 +51,16 @@ export function ownAddresses(connectedInbox?: string | null): Set<string> {
   return addresses;
 }
 
+/**
+ * Subject phrase that marks a website-form notification.
+ *
+ * The form mails come from the agency's own no-reply address, so they only get
+ * onto the board because of this match.
+ */
+export function formSubjectMatch(): string {
+  return (process.env.FORM_SUBJECT_MATCH ?? "brand inquiry").trim().toLowerCase();
+}
+
 /** How far back the very first scan reaches. */
 export function backfillDays(): number {
   const parsed = Number(process.env.SCAN_BACKFILL_DAYS);

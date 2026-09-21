@@ -21,7 +21,13 @@ import {
   type BrandCandidate,
   type ScreenContext,
 } from "./classify";
-import { backfillDays, ownAddresses, ownDomains, scanThreadLimit } from "./env";
+import {
+  backfillDays,
+  formSubjectMatch,
+  ownAddresses,
+  ownDomains,
+  scanThreadLimit,
+} from "./env";
 import {
   fetchThread,
   getAccessToken,
@@ -218,10 +224,11 @@ async function scanInbox(
   ].join(" ");
 
   // --- what we already know --------------------------------------------
-  const [ignored, blockedPatterns, knownThreadIds] = await Promise.all([
+  const [ignored, blockedPatterns, knownThreadIds, knownGroupKeys] = await Promise.all([
     loadPatterns("ignored_senders"),
     loadPatterns("blocked_entities"),
     loadKnownThreadIds(),
+    loadKnownGroupKeys(),
   ]);
 
   const ctx: ScreenContext = {
@@ -229,6 +236,8 @@ async function scanInbox(
     ownDomains: ownDomains(),
     ignored,
     blocked: blockedPatterns,
+    knownGroupKeys,
+    formSubjectMatch: formSubjectMatch(),
   };
 
   // --- pull threads -----------------------------------------------------
@@ -242,6 +251,7 @@ async function scanInbox(
       return await fetchThread(accessToken, id, {
         withBody: !knownThreadIds.has(id),
         ownAddresses: ctx.ownAddresses,
+        ownDomains: ctx.ownDomains,
       });
     } catch {
       return null;
@@ -387,9 +397,11 @@ function messageRow(message: ScannedMessage, brandId: string) {
     thread_id: message.threadId,
     brand_id: brandId,
     direction: message.direction,
+    internal: message.internal,
     from_email: message.fromEmail,
     from_name: message.fromName,
     to_emails: message.toEmails,
+    cc_emails: message.ccEmails,
     subject: message.subject,
     snippet: message.snippet,
     sent_at: message.sentAt,
@@ -404,6 +416,12 @@ async function loadPatterns(table: "ignored_senders" | "blocked_entities"): Prom
 async function loadKnownThreadIds(): Promise<Set<string>> {
   const { data } = await supabaseAdmin().from("threads").select("id");
   return new Set((data ?? []).map((row) => String(row.id)));
+}
+
+/** Brands already on the board, so outbound threads can attach to them. */
+async function loadKnownGroupKeys(): Promise<Set<string>> {
+  const { data } = await supabaseAdmin().from("brands").select("group_key");
+  return new Set((data ?? []).map((row) => String(row.group_key)));
 }
 
 /**
