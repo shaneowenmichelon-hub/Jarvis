@@ -14,8 +14,9 @@ import {
   type PatternRow,
   type StageEventRow,
 } from "./local-store";
+import { groupKeyFor } from "./classify";
 import { supabaseAdmin } from "./supabase/admin";
-import type { BrandRow, MessageRow, ScanRunRow } from "./types";
+import type { BrandDocument, BrandRow, MessageRow, ScanRunRow, Stage } from "./types";
 
 export type { InboxRow, PatternRow, StageEventRow };
 
@@ -76,6 +77,124 @@ export async function getBrand(id: string): Promise<BrandRow | null> {
 
   const { data } = await supabaseAdmin().from("brands").select("*").eq("id", id).maybeSingle();
   return (data as BrandRow | null) ?? null;
+}
+
+export interface NewBrandInput {
+  name: string;
+  contactName: string | null;
+  contactEmail: string | null;
+  summary: string | null;
+  stage: Stage;
+  dealValue: number | null;
+  eventTag: string | null;
+  notes: string | null;
+  documents: BrandDocument[];
+  createdBy: string;
+}
+
+/**
+ * Add a lead that did not come through the website form — a call, a DM, an
+ * introduction at an event.
+ *
+ * The group key decides what the hourly scan will follow afterwards. With an
+ * address we use the same key the form would have produced, so the
+ * conversation attaches from the next scan onwards; without one there is
+ * nothing to track by, so the card stands alone until someone adds an address.
+ */
+export async function createBrand(input: NewBrandInput): Promise<string> {
+  const now = new Date().toISOString();
+  const email = input.contactEmail?.toLowerCase().trim() || null;
+
+  const groupKey = email ? (groupKeyFor(email) ?? email) : `manual:${slug(input.name)}`;
+  // groupKeyFor hands back the domain for a company address and the full
+  // address for free mail, where the domain says nothing about the brand.
+  const domain = email && !groupKey.includes("@") ? groupKey : null;
+
+  const row = {
+    group_key: groupKey,
+    source: "manual" as const,
+    name: input.name.trim(),
+    domain,
+    website: domain ? `https://${domain}` : null,
+    primary_contact_name: input.contactName,
+    primary_contact_email: email,
+    stage: input.stage,
+    // Entered by hand means placed by hand: the scan will suggest, never move.
+    stage_source: "manual" as const,
+    auto_stage: null,
+    stage_changed_at: now,
+    stage_changed_by: input.createdBy,
+    owner_email: null,
+    first_contact_at: now,
+    last_message_at: null,
+    last_inbound_at: null,
+    last_outbound_at: null,
+    last_direction: null,
+    awaiting_our_reply: false,
+    thread_count: 0,
+    message_count: 0,
+    classification: "brand" as const,
+    confidence: 1,
+    summary: input.summary,
+    deal_value: input.dealValue,
+    event_tag: input.eventTag,
+    notes: input.notes,
+    documents: input.documents,
+    blocked: false,
+    archived: false,
+    created_at: now,
+    updated_at: now,
+  };
+
+  if (isLocalMode()) {
+    return mutate((db) => {
+      const existing = db.brands.find((brand) => brand.group_key === groupKey);
+      if (existing) throw new Error(`${existing.name} is already on the board.`);
+
+      const id = `manual-${Date.now().toString(36)}`;
+      db.brands.push({ ...row, id } as BrandRow);
+      db.stage_events.push({
+        id: db.stage_events.reduce((max, event) => Math.max(max, event.id), 0) + 1,
+        brand_id: id,
+        from_stage: null,
+        to_stage: input.stage,
+        source: "manual",
+        actor: input.createdBy,
+        note: "Added by hand — arrived off-website",
+        created_at: now,
+      });
+      return id;
+    });
+  }
+
+  const { data, error } = await supabaseAdmin().from("brands").insert(row).select("id").single();
+
+  if (error) {
+    throw new Error(
+      error.code === "23505" ? "That brand is already on the board." : error.message,
+    );
+  }
+
+  const id = String(data.id);
+  await addStageEvent({
+    brand_id: id,
+    from_stage: null,
+    to_stage: input.stage,
+    source: "manual",
+    actor: input.createdBy,
+    note: "Added by hand — arrived off-website",
+  });
+
+  return id;
+}
+
+function slug(value: string): string {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "brand"
+  );
 }
 
 export async function updateBrand(id: string, patch: Record<string, unknown>): Promise<void> {

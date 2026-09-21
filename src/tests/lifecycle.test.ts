@@ -18,13 +18,14 @@ import type { ScannedMessage, ScannedThread, Stage, StageSource } from "@/lib/ty
 
 const OWN = ["shane@zmmevents.com", "zach@zmmevents.com", "ronan@zmmevents.com"];
 
-function context(knownGroupKeys: string[] = []): ScreenContext {
+function context(known: string[] = []): ScreenContext {
   return {
     ownAddresses: new Set(OWN),
     ownDomains: new Set(["zmmevents.com"]),
     formSenders: new Set(["no-reply@zmmevents.com"]),
     formSubjectMatch: "brand inquiry",
-    knownGroupKeys: new Set(knownGroupKeys),
+    knownByEmail: new Map(known.filter((k) => k.includes("@")).map((k) => [k, k])),
+    knownByDomain: new Map(known.filter((k) => !k.includes("@")).map((k) => [k, k])),
     blocked: new Set(["cbrands.com"]),
   };
 }

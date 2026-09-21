@@ -203,6 +203,24 @@ attaches to it — inbound or outbound, on To or Cc, from any colleague at the
 same company. That is what moves a card from New Submission through to a live
 campaign without anyone touching it.
 
+**Leads that arrive off-website.** Not everything comes through the form — a
+call, a DM, an introduction at an event. **Add a brand** in the header puts one
+on the board by hand, and from that point the hourly scan tracks its email
+exactly like any other card. Give it a contact address and it starts following
+the conversation on the next run; without one the card stands alone until
+someone adds an address.
+
+Manual cards are marked on the board, and you can pin a proposal or deck to any
+brand as a document.
+
+**One company can be two deals.** An agency running campaigns for two different
+clients gets a card each. Matching checks the exact contact address before the
+company domain, so Isabelle's activation and Yewon's Heveblue campaign stay
+separate even though both write from `crains.co.kr`. Where two brands share a
+domain, an address the board does not recognise attaches to neither and the
+scan log says so — filing a message on the wrong deal is worse than leaving it
+unfiled.
+
 **Forwarding a lead to your partner is not a reply.** A message only counts as
 answering a brand when someone from that brand is actually on it. Forwarding an
 inquiry to Zach for a second opinion leaves the card where it was, and shows on

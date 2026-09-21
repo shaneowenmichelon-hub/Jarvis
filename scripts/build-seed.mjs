@@ -5,8 +5,11 @@
  * Every row came from a real scan of shane@zmmevents.com covering
  * 31 Aug – 21 Sep 2026, under the agency's intake rule: a brand exists because
  * it came through the form at collegiateagency.com, which arrives as a
- * notification from no-reply@zmmevents.com. Six submissions landed in that
- * window. Everything after the submission is the conversation that followed.
+ * notification from no-reply@zmmevents.com. Everything after the submission is
+ * the conversation that followed.
+ *
+ * One card here did not come through the form: Triumph arrived off-website and
+ * is entered by hand, which is the other half of the intake rule.
  *
  * Stages are NOT written by hand — this runs the same derivation the hourly
  * scan uses, so the seed cannot drift from the engine.
@@ -22,7 +25,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT = join(HERE, "..", "seed", "pipeline.json");
 
 /** The moment the scan was taken. Ages on the board are measured from here. */
-const SCANNED_AT = "2026-09-21T20:00:00.000Z";
+const SCANNED_AT = "2026-09-21T21:00:00.000Z";
 
 /** Mirrors deriveAutoStage in src/lib/stages.ts. */
 function deriveStage({ lastDirection, everRepliedByUs }) {
@@ -52,21 +55,38 @@ const PIPELINE = [
       ["out", "shane@zmmevents.com", "Re: Collegiate Agency x FratFlix", "Got it — see below.", "2026-09-21T19:44:36Z", false],
     ],
   },
-  {
-    key: "crains.co.kr", name: "Crains", domain: "crains.co.kr",
+   {
+    key: "crains.co.kr", name: "Crains — Korean skincare activation", domain: "crains.co.kr",
     contact: "Isabelle Lee", email: "izi.lee@crains.co.kr",
     submitted: "2026-09-04T07:44:38Z",
     interests: "Brand Ambassadors", budget: null,
-    summary: "Korean skincare client Heveblue wants product sampling at New York and East Coast universities in October.",
-    in: "2026-09-21T15:52:47Z", out: "2026-09-21T15:16:55Z",
-    threads: 4, messages: 53, value: 25000,
+    summary: "Scope agreed after the client meeting: one campus activation plus 10 UGC videos. Revised terms sent.",
+    in: "2026-09-21T07:09:13Z", out: "2026-09-21T15:16:55Z",
+    threads: 3, messages: 47, value: 30000,
+    note: "One of two separate deals at Crains. Yewon's Heveblue campaign is its own card.",
     msgs: [
       ["in", "no-reply@zmmevents.com", "New brand inquiry - Crains", "First Name Isabelle Last Name Lee Company Crains Email izi.lee@crains.co.kr Phone 82-10-62613142 Interests Brand Ambassadors", "2026-09-04T07:44:38Z", false],
-      ["out", "shane@zmmevents.com", "Re: Collegiate sampling activation for a new Korean skincare brand", "Confirming the scope for October.", "2026-09-21T15:16:55Z", false],
-      ["in", "yewon.lee@crains.co.kr", "Re: New opportunity with Crains", "One of our clients, Heveblue, a Korean skincare brand, are interested in partnering with universities in New York and across the East Coast for product sampling on October.", "2026-09-21T15:52:47Z", false],
+      ["in", "izi.lee@crains.co.kr", "Re: Collegiate sampling activation for new Korean skincare brand", "Thanks to your support, the client meeting went very well. Below is the scope of work we are planning to move forward with.", "2026-09-18T02:40:41Z", false],
+      ["in", "izi.lee@crains.co.kr", "Re: Collegiate sampling activation for new Korean skincare brand", "We are excited to move forward with the campaign! Since we updated the scope from two activations to one, we are expecting a reduced budget of $30000 total.", "2026-09-21T07:09:13Z", false],
+      ["out", "shane@zmmevents.com", "Re: Collegiate sampling activation for new Korean skincare brand", "Here is the revised campaign: 1 activation at one selected campus, reduced from 2. UGC production: 10 videos.", "2026-09-21T15:16:55Z", false],
     ],
   },
   {
+    key: "yewon.lee@crains.co.kr", name: "Crains — Heveblue", domain: "crains.co.kr",
+    contact: "Yewon Lee", email: "yewon.lee@crains.co.kr",
+    submitted: "2026-09-21T07:14:16Z",
+    interests: "Product sampling", budget: null,
+    summary: "Heveblue, a Korean skincare brand, wants product sampling at New York and East Coast universities in October.",
+    in: "2026-09-21T15:52:47Z", out: "2026-09-21T20:32:12Z",
+    threads: 1, messages: 4, value: 2500,
+    note: "Introduced by Isabelle on 21 Sep. A different client brand from her own campaign, so it gets its own card.",
+    msgs: [
+      ["in", "izi.lee@crains.co.kr", "New opportunity with Crains", "I'd like to introduce you to my colleague, Yewon cc'd here, who will be supporting one of the other Korean beauty brands at Crains.", "2026-09-21T07:14:16Z", false],
+      ["in", "yewon.lee@crains.co.kr", "Re: New opportunity with Crains", "One of our clients, Heveblue, a Korean skincare brand, are interested in partnering with universities in New York and across the East Coast for product sampling on October.", "2026-09-21T15:52:47Z", false],
+      ["out", "shane@zmmevents.com", "Re: New opportunity with Crains", "This is definitely within our wheelhouse. We could get you onto almost any major campus in the east coast, and we charge $2500 per organization on campus to facilitate product drops.", "2026-09-21T20:32:12Z", false],
+    ],
+  },
+ {
     key: "thesaltyapp.com", name: "Salty", domain: "thesaltyapp.com",
     contact: "Svetoslava Angelova", email: "s.angelova@thesaltyapp.com",
     submitted: "2026-09-14T22:14:12Z",
@@ -121,6 +141,21 @@ const PIPELINE = [
       ["out", "shane@zmmevents.com", "FlatFlow x Collegiate Agency", "Thanks for reaching out via our website. My names Shane Michelon, and I have my partner Zach CCed here. Happy to hop on a call later this week to discuss the scope of work in greater detail.", "2026-09-21T18:50:59Z", false],
     ],
   },
+  {
+    key: "manual:triumph", name: "Triumph", domain: null,
+    contact: null, email: null,
+    source: "manual",
+    submitted: "2026-09-18T20:00:00Z",
+    interests: "Campus signup challenge", budget: "$20,000 package",
+    summary: "Campus signup challenge — 100 ambassadors, 200 posts over 2 weeks, 5 Greek organisations, leaderboard.",
+    in: null, out: null, manualStage: "awaiting_feedback",
+    threads: 0, messages: 0, value: 20000,
+    note: "Came in off-website. Proposal sent 18 Sep; prizes funded by Triumph on top of the package.",
+    documents: [
+      { name: "Campus Signup Challenge proposal", url: "/documents/triumph-campus-signup-challenge.pdf" },
+    ],
+    msgs: [],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -132,10 +167,13 @@ const stageEvents = [];
 PIPELINE.forEach((row, index) => {
   const id = `seed-${String(index + 1).padStart(2, "0")}`;
 
-  const lastMessageAt = [row.in, row.out].filter(Boolean).sort().at(-1);
-  const lastDirection = lastMessageAt === row.out ? "outbound" : "inbound";
+  // A card entered by hand may have no email at all yet — Triumph came in
+  // through a call — so its stage is stated rather than derived.
+  const manual = row.source === "manual";
+  const lastMessageAt = [row.in, row.out].filter(Boolean).sort().at(-1) ?? null;
+  const lastDirection = lastMessageAt ? (lastMessageAt === row.out ? "outbound" : "inbound") : null;
 
-  const stage = deriveStage({ lastDirection, everRepliedByUs: row.out !== null });
+  const stage = row.manualStage ?? deriveStage({ lastDirection, everRepliedByUs: row.out !== null });
 
   // What the board shows when no model has rewritten it.
   const fromFields = [row.interests, row.budget && `Budget: ${row.budget}`]
@@ -145,16 +183,22 @@ PIPELINE.forEach((row, index) => {
   brands.push({
     id,
     group_key: row.key,
+    source: manual ? "manual" : "form",
+    documents: (row.documents ?? []).map((document) => ({
+      ...document,
+      addedAt: row.submitted,
+      addedBy: "shane@zmmevents.com",
+    })),
     name: row.name,
     domain: row.domain ?? null,
     website: row.domain ? `https://${row.domain}` : null,
     primary_contact_name: row.contact,
     primary_contact_email: row.email,
     stage,
-    stage_source: "auto",
-    auto_stage: stage,
-    stage_changed_at: SCANNED_AT,
-    stage_changed_by: "hourly scan",
+    stage_source: manual ? "manual" : "auto",
+    auto_stage: manual ? null : stage,
+    stage_changed_at: manual ? row.submitted : SCANNED_AT,
+    stage_changed_by: manual ? "shane@zmmevents.com" : "hourly scan",
     owner_email: null,
     first_contact_at: row.submitted,
     last_message_at: lastMessageAt,
@@ -182,9 +226,9 @@ PIPELINE.forEach((row, index) => {
     brand_id: id,
     from_stage: null,
     to_stage: stage,
-    source: "auto",
-    actor: "hourly scan",
-    note: "Created from a website submission",
+    source: manual ? "manual" : "auto",
+    actor: manual ? "shane@zmmevents.com" : "hourly scan",
+    note: manual ? "Added by hand — arrived off-website" : "Created from a website submission",
     created_at: row.submitted,
   });
 

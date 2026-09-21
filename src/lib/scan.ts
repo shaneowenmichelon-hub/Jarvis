@@ -213,10 +213,10 @@ async function scanInbox(
   const since = resolveWindow(account.last_window_at as string | null, options);
   const afterSeconds = Math.floor(since.getTime() / 1000);
 
-  const [blockedPatterns, knownThreadIds, knownGroupKeys] = await Promise.all([
+  const [blockedPatterns, knownThreadIds, known] = await Promise.all([
     loadPatterns("blocked_entities"),
     loadKnownThreadIds(),
-    loadKnownGroupKeys(),
+    loadKnownBrands(),
   ]);
 
   const ctx: ScreenContext = {
@@ -224,7 +224,8 @@ async function scanInbox(
     ownDomains: ownDomains(),
     formSenders: formSenders(),
     formSubjectMatch: formSubjectMatch(),
-    knownGroupKeys,
+    knownByEmail: known.byEmail,
+    knownByDomain: known.byDomain,
     blocked: blockedPatterns,
   };
 
@@ -241,8 +242,11 @@ async function scanInbox(
     threadIds.add(id);
   }
 
-  // Conversations with brands already on the board.
-  for (const batch of chunk([...knownGroupKeys], KEYS_PER_QUERY)) {
+  // Conversations with brands already on the board. Both the exact addresses
+  // and the company domains, so a colleague writing in is still found.
+  const searchTerms = [...new Set([...known.byEmail.keys(), ...known.byDomain.keys()])];
+
+  for (const batch of chunk(searchTerms, KEYS_PER_QUERY)) {
     const clause = batch.map((key) => `from:${key} to:${key} cc:${key}`).join(" ");
     for (const id of await listThreadIds(
       accessToken,
@@ -428,19 +432,51 @@ async function loadKnownThreadIds(): Promise<Set<string>> {
 }
 
 /**
- * Brands on the board. Their conversations are what step 4 goes looking for.
+ * Brands on the board, indexed for matching.
  *
  * Archived brands are excluded, so dismissing one genuinely stops the scan
  * following it rather than quietly carrying on in the background.
+ *
+ * A domain is only indexed when exactly one brand sits on it. Two brands
+ * sharing a domain — an agency running campaigns for two different clients —
+ * are reachable only by their own contact addresses, because filing a message
+ * on the wrong deal is worse than leaving it unfiled.
  */
-async function loadKnownGroupKeys(): Promise<Set<string>> {
+async function loadKnownBrands(): Promise<{
+  byEmail: Map<string, string>;
+  byDomain: Map<string, string>;
+}> {
   const { data } = await supabaseAdmin()
     .from("brands")
-    .select("group_key")
+    .select("group_key, domain, primary_contact_email")
     .eq("blocked", false)
     .eq("archived", false);
 
-  return new Set((data ?? []).map((row) => String(row.group_key)));
+  const byEmail = new Map<string, string>();
+  const domainCounts = new Map<string, Set<string>>();
+
+  for (const row of data ?? []) {
+    const groupKey = String(row.group_key);
+    const email = row.primary_contact_email ? String(row.primary_contact_email).toLowerCase() : null;
+
+    if (email) byEmail.set(email, groupKey);
+    // The group key is itself an address when the contact is on free mail.
+    if (groupKey.includes("@")) byEmail.set(groupKey.toLowerCase(), groupKey);
+
+    const domain = row.domain ? String(row.domain).toLowerCase() : null;
+    if (domain) {
+      const brands = domainCounts.get(domain) ?? new Set<string>();
+      brands.add(groupKey);
+      domainCounts.set(domain, brands);
+    }
+  }
+
+  const byDomain = new Map<string, string>();
+  for (const [domain, brands] of domainCounts) {
+    if (brands.size === 1) byDomain.set(domain, [...brands][0]);
+  }
+
+  return { byEmail, byDomain };
 }
 
 /**

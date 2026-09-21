@@ -16,7 +16,17 @@ const ctx: ScreenContext = {
   ownDomains: new Set(["zmmevents.com"]),
   formSenders: new Set(["no-reply@zmmevents.com"]),
   formSubjectMatch: "brand inquiry",
-  knownGroupKeys: new Set(["thesaltyapp.com", "itsfratflix.com"]),
+  knownByEmail: new Map([
+    ["s.angelova@thesaltyapp.com", "thesaltyapp.com"],
+    ["cj@itsfratflix.com", "itsfratflix.com"],
+    ["izi.lee@crains.co.kr", "crains.co.kr"],
+    ["yewon.lee@crains.co.kr", "yewon.lee@crains.co.kr"],
+  ]),
+  knownByDomain: new Map([
+    ["thesaltyapp.com", "thesaltyapp.com"],
+    ["itsfratflix.com", "itsfratflix.com"],
+    // crains.co.kr is deliberately absent: two brands share it.
+  ]),
   blocked: new Set(["cbrands.com"]),
 };
 
@@ -259,6 +269,79 @@ describe("conversations with brands already on the board", () => {
     );
 
     expect(result.verdict).toBe("skip");
+  });
+});
+
+describe("two brands at the same company", () => {
+  it("routes each colleague to their own card", () => {
+    const toIsabelle = screenThread(
+      thread([message({ fromEmail: "izi.lee@crains.co.kr", subject: "Re: activation" })]),
+      ctx,
+    );
+    const toYewon = screenThread(
+      thread([message({ fromEmail: "yewon.lee@crains.co.kr", subject: "Re: Heveblue" })]),
+      ctx,
+    );
+
+    expect(toIsabelle.verdict === "attach" && toIsabelle.groupKey).toBe("crains.co.kr");
+    expect(toYewon.verdict === "attach" && toYewon.groupKey).toBe("yewon.lee@crains.co.kr");
+  });
+
+  it("prefers an exact address over any domain match in the same thread", () => {
+    // Yewon writes; Isabelle is on CC. It is Yewon's deal.
+    const result = screenThread(
+      thread([
+        message({
+          fromEmail: "yewon.lee@crains.co.kr",
+          ccEmails: ["izi.lee@crains.co.kr"],
+          subject: "Re: Heveblue",
+        }),
+      ]),
+      { ...ctx, knownByDomain: new Map([...ctx.knownByDomain, ["crains.co.kr", "crains.co.kr"]]) },
+    );
+
+    expect(result.verdict === "attach" && result.groupKey).toBe("yewon.lee@crains.co.kr");
+  });
+
+  it("files nothing rather than guessing when an unknown colleague writes", () => {
+    const result = screenThread(
+      thread([message({ fromEmail: "romy.shin@crains.co.kr", subject: "Re: activation" })]),
+      ctx,
+    );
+
+    expect(result.verdict).toBe("skip");
+  });
+
+  it("gives a second submission from the same company its own card", () => {
+    const result = screenThread(
+      thread([
+        formMail({
+          subject: "New brand inquiry - Crains",
+          body: "Company Crains Email romy.shin@crains.co.kr Interests Sampling",
+        }),
+      ]),
+      { ...ctx, knownByDomain: new Map([["crains.co.kr", "crains.co.kr"]]) },
+    );
+
+    expect(result.verdict).toBe("submission");
+    // Not "crains.co.kr" — that card is Isabelle's.
+    expect(result.verdict === "submission" && result.candidate.groupKey).toBe(
+      "romy.shin@crains.co.kr",
+    );
+  });
+
+  it("returns the same person to their existing card", () => {
+    const result = screenThread(
+      thread([
+        formMail({
+          subject: "New brand inquiry - Crains",
+          body: "Company Crains Email izi.lee@crains.co.kr Interests Sampling",
+        }),
+      ]),
+      ctx,
+    );
+
+    expect(result.verdict === "submission" && result.candidate.groupKey).toBe("crains.co.kr");
   });
 });
 

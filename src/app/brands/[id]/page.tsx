@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { ArrowLeft, ArrowDownLeft, ArrowUpRight, FileText } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
@@ -98,6 +98,10 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
             >
               <Fact label="Stage" value={STAGE_META[brand.stage].label} />
               <Fact
+                label="Came in via"
+                value={brand.source === "manual" ? "Off-website, added by hand" : "Website form"}
+              />
+              <Fact
                 label="Set by"
                 value={
                   brand.stage_source === "manual"
@@ -113,15 +117,47 @@ export default async function BrandPage({ params }: { params: Promise<{ id: stri
               <Fact label="First contact" value={shortDate(brand.first_contact_at)} />
               <Fact
                 label="Last message"
-                value={`${relativeTime(brand.last_message_at)} (${
-                  brand.last_direction === "inbound" ? "them" : "us"
-                })`}
+                value={
+                  brand.last_direction
+                    ? `${relativeTime(brand.last_message_at)} (${
+                        brand.last_direction === "inbound" ? "them" : "us"
+                      })`
+                    : "no email yet"
+                }
               />
               <Fact label="Deal value" value={currency(brand.deal_value)} />
               <Fact label="Event" value={brand.event_tag ?? "—"} />
               <Fact label="Messages" value={`${brand.message_count} in ${brand.thread_count} threads`} />
             </dl>
           </section>
+
+          {brand.documents.length > 0 && (
+            <section className="card" style={{ padding: "14px 16px" }}>
+              <h2 style={{ margin: "0 0 10px", fontSize: 14 }}>Documents</h2>
+              <ul style={{ margin: 0, padding: 0, listStyle: "none", display: "grid", gap: 8 }}>
+                {brand.documents.map((document) => (
+                  <li
+                    key={document.url}
+                    style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}
+                  >
+                    <FileText size={14} style={{ color: "var(--ink-muted)", flexShrink: 0 }} />
+                    <a
+                      href={document.url}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      style={{ color: "var(--ball-them)" }}
+                    >
+                      {document.name}
+                    </a>
+                    <span style={{ fontSize: 11.5, color: "var(--ink-muted)" }}>
+                      {shortDate(document.addedAt)}
+                      {document.addedBy && ` · ${document.addedBy}`}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
 
           <section>
             <h2 style={{ margin: "0 0 10px", fontSize: 14 }}>Email history</h2>

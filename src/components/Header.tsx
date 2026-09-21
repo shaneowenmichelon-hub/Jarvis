@@ -5,6 +5,7 @@ import type { SessionUser } from "@/lib/auth";
 import { relativeTime } from "@/lib/format";
 import type { ScanRunRow } from "@/lib/types";
 
+import AddBrandButton from "./AddBrandButton";
 import ScanButton from "./ScanButton";
 import ThemeToggle from "./ThemeToggle";
 
@@ -45,6 +46,7 @@ export default function Header({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <AddBrandButton />
         {/* No inbox is connected locally, so there is nothing to scan. */}
         {!localMode && <ScanButton />}
         <Link href="/settings" className="btn btn-sm" aria-label="Settings">

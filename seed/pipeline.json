@@ -1,9 +1,11 @@
 {
-  "scanned_at": "2026-09-21T20:00:00.000Z",
+  "scanned_at": "2026-09-21T21:00:00.000Z",
   "brands": [
     {
       "id": "seed-01",
       "group_key": "itsfratflix.com",
+      "source": "form",
+      "documents": [],
       "name": "FratFlix",
       "domain": "itsfratflix.com",
       "website": "https://itsfratflix.com",
@@ -12,7 +14,7 @@
       "stage": "awaiting_feedback",
       "stage_source": "auto",
       "auto_stage": "awaiting_feedback",
-      "stage_changed_at": "2026-09-21T20:00:00.000Z",
+      "stage_changed_at": "2026-09-21T21:00:00.000Z",
       "stage_changed_by": "hourly scan",
       "owner_email": null,
       "first_contact_at": "2026-08-31T16:52:32Z",
@@ -32,44 +34,83 @@
       "blocked": false,
       "archived": false,
       "created_at": "2026-08-31T16:52:32Z",
-      "updated_at": "2026-09-21T20:00:00.000Z"
+      "updated_at": "2026-09-21T21:00:00.000Z"
     },
     {
       "id": "seed-02",
       "group_key": "crains.co.kr",
-      "name": "Crains",
+      "source": "form",
+      "documents": [],
+      "name": "Crains — Korean skincare activation",
       "domain": "crains.co.kr",
       "website": "https://crains.co.kr",
       "primary_contact_name": "Isabelle Lee",
       "primary_contact_email": "izi.lee@crains.co.kr",
-      "stage": "needs_reply",
+      "stage": "awaiting_feedback",
       "stage_source": "auto",
-      "auto_stage": "needs_reply",
-      "stage_changed_at": "2026-09-21T20:00:00.000Z",
+      "auto_stage": "awaiting_feedback",
+      "stage_changed_at": "2026-09-21T21:00:00.000Z",
       "stage_changed_by": "hourly scan",
       "owner_email": null,
       "first_contact_at": "2026-09-04T07:44:38Z",
-      "last_message_at": "2026-09-21T15:52:47Z",
-      "last_inbound_at": "2026-09-21T15:52:47Z",
+      "last_message_at": "2026-09-21T15:16:55Z",
+      "last_inbound_at": "2026-09-21T07:09:13Z",
       "last_outbound_at": "2026-09-21T15:16:55Z",
-      "last_direction": "inbound",
-      "awaiting_our_reply": true,
-      "thread_count": 4,
-      "message_count": 53,
+      "last_direction": "outbound",
+      "awaiting_our_reply": false,
+      "thread_count": 3,
+      "message_count": 47,
       "classification": "brand",
       "confidence": 1,
-      "summary": "Korean skincare client Heveblue wants product sampling at New York and East Coast universities in October.",
-      "deal_value": 25000,
+      "summary": "Scope agreed after the client meeting: one campus activation plus 10 UGC videos. Revised terms sent.",
+      "deal_value": 30000,
       "event_tag": null,
-      "notes": null,
+      "notes": "One of two separate deals at Crains. Yewon's Heveblue campaign is its own card.",
       "blocked": false,
       "archived": false,
       "created_at": "2026-09-04T07:44:38Z",
-      "updated_at": "2026-09-21T20:00:00.000Z"
+      "updated_at": "2026-09-21T21:00:00.000Z"
     },
     {
       "id": "seed-03",
+      "group_key": "yewon.lee@crains.co.kr",
+      "source": "form",
+      "documents": [],
+      "name": "Crains — Heveblue",
+      "domain": "crains.co.kr",
+      "website": "https://crains.co.kr",
+      "primary_contact_name": "Yewon Lee",
+      "primary_contact_email": "yewon.lee@crains.co.kr",
+      "stage": "awaiting_feedback",
+      "stage_source": "auto",
+      "auto_stage": "awaiting_feedback",
+      "stage_changed_at": "2026-09-21T21:00:00.000Z",
+      "stage_changed_by": "hourly scan",
+      "owner_email": null,
+      "first_contact_at": "2026-09-21T07:14:16Z",
+      "last_message_at": "2026-09-21T20:32:12Z",
+      "last_inbound_at": "2026-09-21T15:52:47Z",
+      "last_outbound_at": "2026-09-21T20:32:12Z",
+      "last_direction": "outbound",
+      "awaiting_our_reply": false,
+      "thread_count": 1,
+      "message_count": 4,
+      "classification": "brand",
+      "confidence": 1,
+      "summary": "Heveblue, a Korean skincare brand, wants product sampling at New York and East Coast universities in October.",
+      "deal_value": 2500,
+      "event_tag": null,
+      "notes": "Introduced by Isabelle on 21 Sep. A different client brand from her own campaign, so it gets its own card.",
+      "blocked": false,
+      "archived": false,
+      "created_at": "2026-09-21T07:14:16Z",
+      "updated_at": "2026-09-21T21:00:00.000Z"
+    },
+    {
+      "id": "seed-04",
       "group_key": "thesaltyapp.com",
+      "source": "form",
+      "documents": [],
       "name": "Salty",
       "domain": "thesaltyapp.com",
       "website": "https://thesaltyapp.com",
@@ -78,7 +119,7 @@
       "stage": "awaiting_feedback",
       "stage_source": "auto",
       "auto_stage": "awaiting_feedback",
-      "stage_changed_at": "2026-09-21T20:00:00.000Z",
+      "stage_changed_at": "2026-09-21T21:00:00.000Z",
       "stage_changed_by": "hourly scan",
       "owner_email": null,
       "first_contact_at": "2026-09-14T22:14:12Z",
@@ -98,11 +139,13 @@
       "blocked": false,
       "archived": false,
       "created_at": "2026-09-14T22:14:12Z",
-      "updated_at": "2026-09-21T20:00:00.000Z"
+      "updated_at": "2026-09-21T21:00:00.000Z"
     },
     {
-      "id": "seed-04",
+      "id": "seed-05",
       "group_key": "uhomes.com",
+      "source": "form",
+      "documents": [],
       "name": "uhomes.com",
       "domain": "uhomes.com",
       "website": "https://uhomes.com",
@@ -111,7 +154,7 @@
       "stage": "awaiting_feedback",
       "stage_source": "auto",
       "auto_stage": "awaiting_feedback",
-      "stage_changed_at": "2026-09-21T20:00:00.000Z",
+      "stage_changed_at": "2026-09-21T21:00:00.000Z",
       "stage_changed_by": "hourly scan",
       "owner_email": null,
       "first_contact_at": "2026-09-15T17:57:33Z",
@@ -131,11 +174,13 @@
       "blocked": false,
       "archived": false,
       "created_at": "2026-09-15T17:57:33Z",
-      "updated_at": "2026-09-21T20:00:00.000Z"
+      "updated_at": "2026-09-21T21:00:00.000Z"
     },
     {
-      "id": "seed-05",
+      "id": "seed-06",
       "group_key": "shaneowenmichelon@yahoo.com",
+      "source": "form",
+      "documents": [],
       "name": "SOS consultants",
       "domain": null,
       "website": null,
@@ -144,7 +189,7 @@
       "stage": "new_submission",
       "stage_source": "auto",
       "auto_stage": "new_submission",
-      "stage_changed_at": "2026-09-21T20:00:00.000Z",
+      "stage_changed_at": "2026-09-21T21:00:00.000Z",
       "stage_changed_by": "hourly scan",
       "owner_email": null,
       "first_contact_at": "2026-09-16T18:50:28Z",
@@ -164,11 +209,13 @@
       "blocked": false,
       "archived": false,
       "created_at": "2026-09-16T18:50:28Z",
-      "updated_at": "2026-09-21T20:00:00.000Z"
+      "updated_at": "2026-09-21T21:00:00.000Z"
     },
     {
-      "id": "seed-06",
+      "id": "seed-07",
       "group_key": "orbitstudio.us",
+      "source": "form",
+      "documents": [],
       "name": "FlatFlow",
       "domain": "orbitstudio.us",
       "website": "https://orbitstudio.us",
@@ -177,7 +224,7 @@
       "stage": "awaiting_feedback",
       "stage_source": "auto",
       "auto_stage": "awaiting_feedback",
-      "stage_changed_at": "2026-09-21T20:00:00.000Z",
+      "stage_changed_at": "2026-09-21T21:00:00.000Z",
       "stage_changed_by": "hourly scan",
       "owner_email": null,
       "first_contact_at": "2026-09-21T15:33:23Z",
@@ -197,7 +244,49 @@
       "blocked": false,
       "archived": false,
       "created_at": "2026-09-21T15:33:23Z",
-      "updated_at": "2026-09-21T20:00:00.000Z"
+      "updated_at": "2026-09-21T21:00:00.000Z"
+    },
+    {
+      "id": "seed-08",
+      "group_key": "manual:triumph",
+      "source": "manual",
+      "documents": [
+        {
+          "name": "Campus Signup Challenge proposal",
+          "url": "/documents/triumph-campus-signup-challenge.pdf",
+          "addedAt": "2026-09-18T20:00:00Z",
+          "addedBy": "shane@zmmevents.com"
+        }
+      ],
+      "name": "Triumph",
+      "domain": null,
+      "website": null,
+      "primary_contact_name": null,
+      "primary_contact_email": null,
+      "stage": "awaiting_feedback",
+      "stage_source": "manual",
+      "auto_stage": null,
+      "stage_changed_at": "2026-09-18T20:00:00Z",
+      "stage_changed_by": "shane@zmmevents.com",
+      "owner_email": null,
+      "first_contact_at": "2026-09-18T20:00:00Z",
+      "last_message_at": null,
+      "last_inbound_at": null,
+      "last_outbound_at": null,
+      "last_direction": null,
+      "awaiting_our_reply": false,
+      "thread_count": 0,
+      "message_count": 0,
+      "classification": "brand",
+      "confidence": 1,
+      "summary": "Campus signup challenge — 100 ambassadors, 200 posts over 2 weeks, 5 Greek organisations, leaderboard.",
+      "deal_value": 20000,
+      "event_tag": null,
+      "notes": "Came in off-website. Proposal sent 18 Sep; prizes funded by Triumph on top of the package.",
+      "blocked": false,
+      "archived": false,
+      "created_at": "2026-09-18T20:00:00Z",
+      "updated_at": "2026-09-21T21:00:00.000Z"
     }
   ],
   "messages": [
@@ -285,6 +374,38 @@
       "id": "seed-02-m2",
       "thread_id": "seed-02-t1",
       "brand_id": "seed-02",
+      "direction": "in",
+      "internal": false,
+      "from_email": "izi.lee@crains.co.kr",
+      "from_name": null,
+      "to_emails": [
+        "izi.lee@crains.co.kr"
+      ],
+      "cc_emails": [],
+      "subject": "Re: Collegiate sampling activation for new Korean skincare brand",
+      "snippet": "Thanks to your support, the client meeting went very well. Below is the scope of work we are planning to move forward with.",
+      "sent_at": "2026-09-18T02:40:41Z"
+    },
+    {
+      "id": "seed-02-m3",
+      "thread_id": "seed-02-t1",
+      "brand_id": "seed-02",
+      "direction": "in",
+      "internal": false,
+      "from_email": "izi.lee@crains.co.kr",
+      "from_name": null,
+      "to_emails": [
+        "izi.lee@crains.co.kr"
+      ],
+      "cc_emails": [],
+      "subject": "Re: Collegiate sampling activation for new Korean skincare brand",
+      "snippet": "We are excited to move forward with the campaign! Since we updated the scope from two activations to one, we are expecting a reduced budget of $30000 total.",
+      "sent_at": "2026-09-21T07:09:13Z"
+    },
+    {
+      "id": "seed-02-m4",
+      "thread_id": "seed-02-t1",
+      "brand_id": "seed-02",
       "direction": "out",
       "internal": false,
       "from_email": "shane@zmmevents.com",
@@ -293,20 +414,36 @@
         "izi.lee@crains.co.kr"
       ],
       "cc_emails": [],
-      "subject": "Re: Collegiate sampling activation for a new Korean skincare brand",
-      "snippet": "Confirming the scope for October.",
+      "subject": "Re: Collegiate sampling activation for new Korean skincare brand",
+      "snippet": "Here is the revised campaign: 1 activation at one selected campus, reduced from 2. UGC production: 10 videos.",
       "sent_at": "2026-09-21T15:16:55Z"
     },
     {
-      "id": "seed-02-m3",
-      "thread_id": "seed-02-t1",
-      "brand_id": "seed-02",
+      "id": "seed-03-m1",
+      "thread_id": "seed-03-t1",
+      "brand_id": "seed-03",
+      "direction": "in",
+      "internal": false,
+      "from_email": "izi.lee@crains.co.kr",
+      "from_name": null,
+      "to_emails": [
+        "yewon.lee@crains.co.kr"
+      ],
+      "cc_emails": [],
+      "subject": "New opportunity with Crains",
+      "snippet": "I'd like to introduce you to my colleague, Yewon cc'd here, who will be supporting one of the other Korean beauty brands at Crains.",
+      "sent_at": "2026-09-21T07:14:16Z"
+    },
+    {
+      "id": "seed-03-m2",
+      "thread_id": "seed-03-t1",
+      "brand_id": "seed-03",
       "direction": "in",
       "internal": false,
       "from_email": "yewon.lee@crains.co.kr",
       "from_name": null,
       "to_emails": [
-        "izi.lee@crains.co.kr"
+        "yewon.lee@crains.co.kr"
       ],
       "cc_emails": [],
       "subject": "Re: New opportunity with Crains",
@@ -314,9 +451,25 @@
       "sent_at": "2026-09-21T15:52:47Z"
     },
     {
-      "id": "seed-03-m1",
+      "id": "seed-03-m3",
       "thread_id": "seed-03-t1",
       "brand_id": "seed-03",
+      "direction": "out",
+      "internal": false,
+      "from_email": "shane@zmmevents.com",
+      "from_name": null,
+      "to_emails": [
+        "yewon.lee@crains.co.kr"
+      ],
+      "cc_emails": [],
+      "subject": "Re: New opportunity with Crains",
+      "snippet": "This is definitely within our wheelhouse. We could get you onto almost any major campus in the east coast, and we charge $2500 per organization on campus to facilitate product drops.",
+      "sent_at": "2026-09-21T20:32:12Z"
+    },
+    {
+      "id": "seed-04-m1",
+      "thread_id": "seed-04-t1",
+      "brand_id": "seed-04",
       "direction": "in",
       "internal": false,
       "from_email": "no-reply@zmmevents.com",
@@ -330,9 +483,9 @@
       "sent_at": "2026-09-14T22:14:12Z"
     },
     {
-      "id": "seed-03-m2",
-      "thread_id": "seed-03-t1",
-      "brand_id": "seed-03",
+      "id": "seed-04-m2",
+      "thread_id": "seed-04-t1",
+      "brand_id": "seed-04",
       "direction": "out",
       "internal": false,
       "from_email": "shane@zmmevents.com",
@@ -346,9 +499,9 @@
       "sent_at": "2026-09-14T23:12:05Z"
     },
     {
-      "id": "seed-03-m3",
-      "thread_id": "seed-03-t1",
-      "brand_id": "seed-03",
+      "id": "seed-04-m3",
+      "thread_id": "seed-04-t1",
+      "brand_id": "seed-04",
       "direction": "out",
       "internal": false,
       "from_email": "shane@zmmevents.com",
@@ -362,9 +515,9 @@
       "sent_at": "2026-09-18T18:36:25Z"
     },
     {
-      "id": "seed-04-m1",
-      "thread_id": "seed-04-t1",
-      "brand_id": "seed-04",
+      "id": "seed-05-m1",
+      "thread_id": "seed-05-t1",
+      "brand_id": "seed-05",
       "direction": "in",
       "internal": false,
       "from_email": "no-reply@zmmevents.com",
@@ -378,9 +531,9 @@
       "sent_at": "2026-09-15T17:57:33Z"
     },
     {
-      "id": "seed-04-m2",
-      "thread_id": "seed-04-t1",
-      "brand_id": "seed-04",
+      "id": "seed-05-m2",
+      "thread_id": "seed-05-t1",
+      "brand_id": "seed-05",
       "direction": "in",
       "internal": false,
       "from_email": "zimo.liu@uhomes.com",
@@ -394,9 +547,9 @@
       "sent_at": "2026-09-21T17:11:46Z"
     },
     {
-      "id": "seed-04-m3",
-      "thread_id": "seed-04-t1",
-      "brand_id": "seed-04",
+      "id": "seed-05-m3",
+      "thread_id": "seed-05-t1",
+      "brand_id": "seed-05",
       "direction": "out",
       "internal": false,
       "from_email": "shane@zmmevents.com",
@@ -410,9 +563,9 @@
       "sent_at": "2026-09-21T17:19:49Z"
     },
     {
-      "id": "seed-05-m1",
-      "thread_id": "seed-05-t1",
-      "brand_id": "seed-05",
+      "id": "seed-06-m1",
+      "thread_id": "seed-06-t1",
+      "brand_id": "seed-06",
       "direction": "in",
       "internal": false,
       "from_email": "no-reply@zmmevents.com",
@@ -426,9 +579,9 @@
       "sent_at": "2026-09-16T18:50:28Z"
     },
     {
-      "id": "seed-06-m1",
-      "thread_id": "seed-06-t1",
-      "brand_id": "seed-06",
+      "id": "seed-07-m1",
+      "thread_id": "seed-07-t1",
+      "brand_id": "seed-07",
       "direction": "in",
       "internal": false,
       "from_email": "no-reply@zmmevents.com",
@@ -442,9 +595,9 @@
       "sent_at": "2026-09-21T15:33:23Z"
     },
     {
-      "id": "seed-06-m2",
-      "thread_id": "seed-06-t1",
-      "brand_id": "seed-06",
+      "id": "seed-07-m2",
+      "thread_id": "seed-07-t1",
+      "brand_id": "seed-07",
       "direction": "out",
       "internal": false,
       "from_email": "shane@zmmevents.com",
@@ -473,7 +626,7 @@
       "id": 2,
       "brand_id": "seed-02",
       "from_stage": null,
-      "to_stage": "needs_reply",
+      "to_stage": "awaiting_feedback",
       "source": "auto",
       "actor": "hourly scan",
       "note": "Created from a website submission",
@@ -487,7 +640,7 @@
       "source": "auto",
       "actor": "hourly scan",
       "note": "Created from a website submission",
-      "created_at": "2026-09-14T22:14:12Z"
+      "created_at": "2026-09-21T07:14:16Z"
     },
     {
       "id": 4,
@@ -497,11 +650,21 @@
       "source": "auto",
       "actor": "hourly scan",
       "note": "Created from a website submission",
-      "created_at": "2026-09-15T17:57:33Z"
+      "created_at": "2026-09-14T22:14:12Z"
     },
     {
       "id": 5,
       "brand_id": "seed-05",
+      "from_stage": null,
+      "to_stage": "awaiting_feedback",
+      "source": "auto",
+      "actor": "hourly scan",
+      "note": "Created from a website submission",
+      "created_at": "2026-09-15T17:57:33Z"
+    },
+    {
+      "id": 6,
+      "brand_id": "seed-06",
       "from_stage": null,
       "to_stage": "new_submission",
       "source": "auto",
@@ -510,14 +673,24 @@
       "created_at": "2026-09-16T18:50:28Z"
     },
     {
-      "id": 6,
-      "brand_id": "seed-06",
+      "id": 7,
+      "brand_id": "seed-07",
       "from_stage": null,
       "to_stage": "awaiting_feedback",
       "source": "auto",
       "actor": "hourly scan",
       "note": "Created from a website submission",
       "created_at": "2026-09-21T15:33:23Z"
+    },
+    {
+      "id": 8,
+      "brand_id": "seed-08",
+      "from_stage": null,
+      "to_stage": "awaiting_feedback",
+      "source": "manual",
+      "actor": "shane@zmmevents.com",
+      "note": "Added by hand — arrived off-website",
+      "created_at": "2026-09-18T20:00:00Z"
     }
   ],
   "scan_runs": [
@@ -525,14 +698,14 @@
       "id": 1,
       "trigger": "backfill",
       "status": "ok",
-      "started_at": "2026-09-21T20:00:00.000Z",
-      "finished_at": "2026-09-21T20:00:00.000Z",
+      "started_at": "2026-09-21T21:00:00.000Z",
+      "finished_at": "2026-09-21T21:00:00.000Z",
       "window_start": "2026-08-31T00:00:00.000Z",
       "threads_seen": 27,
-      "messages_seen": 16,
-      "brands_created": 6,
+      "messages_seen": 20,
+      "brands_created": 8,
       "brands_updated": 0,
-      "stages_changed": 6,
+      "stages_changed": 8,
       "skipped": 11,
       "error": null
     }
@@ -542,8 +715,8 @@
       "id": "seed-inbox",
       "email": "shane@zmmevents.com",
       "connected_by": "shane@zmmevents.com",
-      "connected_at": "2026-09-21T20:00:00.000Z",
-      "last_scan_at": "2026-09-21T20:00:00.000Z",
+      "connected_at": "2026-09-21T21:00:00.000Z",
+      "last_scan_at": "2026-09-21T21:00:00.000Z",
       "active": true
     }
   ],

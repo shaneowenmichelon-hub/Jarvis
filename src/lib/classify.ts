@@ -57,8 +57,23 @@ export interface ScreenContext {
   formSenders: Set<string>;
   /** Lowercased phrase in the subject that marks a form notification. */
   formSubjectMatch: string;
-  /** Group keys already on the board, so their conversations attach. */
-  knownGroupKeys: Set<string>;
+  /**
+   * Exact contact addresses already on the board, mapped to their brand.
+   *
+   * Checked before the domain, because one company can be running two
+   * different deals — an agency with two clients, say — and each colleague
+   * belongs to their own card.
+   */
+  knownByEmail: Map<string, string>;
+  /**
+   * Domains on the board, mapped to their brand.
+   *
+   * Only populated for domains carrying exactly one brand. Where two brands
+   * share a domain, an address we do not recognise attaches to neither: a
+   * message on the wrong card is worse than a message on no card, and the
+   * scan log says which address it could not place.
+   */
+  knownByDomain: Map<string, string>;
   /** Entities under a do-not-contact rule. */
   blocked: Set<string>;
 }
@@ -154,7 +169,7 @@ export function screenThread(thread: ScannedThread, ctx: ScreenContext): ScreenR
   // 1. A website submission. The only thing that creates a brand.
   const formMessage = messages.find((message) => isFormNotification(message, ctx));
   if (formMessage) {
-    const candidate = candidateFromForm(parseFormSubmission(formMessage), formMessage);
+    const candidate = candidateFromForm(parseFormSubmission(formMessage), formMessage, ctx);
     if (!candidate) {
       return { verdict: "skip", reason: "Form notification with no usable contact address" };
     }
@@ -183,17 +198,34 @@ export function screenThread(thread: ScannedThread, ctx: ScreenContext): ScreenR
   return { verdict: "skip", reason: "Not a website submission, and no brand on the board" };
 }
 
-/** Any participant whose company is already on the board. */
+/**
+ * Any participant already on the board.
+ *
+ * Exact address wins over domain, and every address in the thread is checked
+ * for an exact match before any domain match is accepted — otherwise a thread
+ * between Isabelle and Yewon at the same agency would land on whichever of
+ * them happened to appear first.
+ */
 function matchKnownBrand(messages: ScannedMessage[], ctx: ScreenContext): string | null {
+  const external: string[] = [];
+
   for (const message of messages) {
-    const participants = [message.fromEmail, ...message.toEmails, ...message.ccEmails];
-
-    for (const address of participants) {
-      if (!address || isOurs(address, ctx)) continue;
-
-      const key = groupKeyFor(address);
-      if (key && ctx.knownGroupKeys.has(key)) return key;
+    for (const address of [message.fromEmail, ...message.toEmails, ...message.ccEmails]) {
+      if (address && !isOurs(address, ctx)) external.push(address.toLowerCase());
     }
+  }
+
+  for (const address of external) {
+    const exact = ctx.knownByEmail.get(address);
+    if (exact) return exact;
+  }
+
+  for (const address of external) {
+    const domain = emailDomain(address);
+    if (!domain) continue;
+
+    const byDomain = ctx.knownByDomain.get(rootDomain(domain)) ?? ctx.knownByDomain.get(domain);
+    if (byDomain) return byDomain;
   }
 
   return null;
@@ -261,15 +293,28 @@ export function parseFormSubmission(message: ScannedMessage): FormSubmission {
 function candidateFromForm(
   submission: FormSubmission,
   message: ScannedMessage,
+  ctx: ScreenContext,
 ): BrandCandidate | null {
   const address = submission.contactEmail;
   if (!address) return null;
 
-  const groupKey = groupKeyFor(address);
+  const domainKey = groupKeyFor(address);
   const domain = emailDomain(address);
-  if (!groupKey || !domain) return null;
+  if (!domainKey || !domain) return null;
 
   const isFreeMail = FREE_MAIL_DOMAINS.has(domain);
+
+  // Which card does this submission belong to?
+  //
+  //   this exact person has submitted before  → their existing card
+  //   a colleague of theirs is on the board   → a card of their own
+  //   neither                                 → the company's card
+  //
+  // The middle case is an agency running two campaigns for two different
+  // clients out of one domain. Merging those loses a deal.
+  const groupKey =
+    ctx.knownByEmail.get(address) ??
+    (ctx.knownByDomain.has(domainKey) ? address : domainKey);
 
   return {
     groupKey,

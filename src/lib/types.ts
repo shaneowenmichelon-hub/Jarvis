@@ -108,9 +108,30 @@ export interface BrandEmailFacts {
   lastDirection: Direction;
 }
 
+/** A proposal, deck or contract pinned to a brand. */
+export interface BrandDocument {
+  name: string;
+  /** Where it lives — a path under /public locally, or any URL. */
+  url: string;
+  addedAt: string;
+  addedBy: string | null;
+}
+
+/**
+ * How a brand got onto the board.
+ *
+ * `form` is the collegiateagency.com submission — the front door, and the only
+ * thing the scan itself creates. `manual` is a lead that arrived some other
+ * way: a call, a DM, an introduction at an event. Once it exists, the hourly
+ * scan tracks its conversation exactly the same way.
+ */
+export type BrandSource = "form" | "manual";
+
 export interface BrandRow {
   id: string;
   group_key: string;
+  source: BrandSource;
+  documents: BrandDocument[];
   name: string;
   domain: string | null;
   website: string | null;

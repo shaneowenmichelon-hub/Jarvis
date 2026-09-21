@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Mail, Pin } from "lucide-react";
+import { AlertTriangle, FileText, Mail, Pin, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -71,14 +71,32 @@ export default function BrandCard({ brand }: { brand: BrandRow }) {
         >
           {brand.name}
         </Link>
-        {brand.stage_source === "manual" && (
-          <span
-            title="Pinned by hand — the hourly scan will not move this card"
-            style={{ color: "var(--ink-muted)", flexShrink: 0, marginTop: 2 }}
-          >
-            <Pin size={13} />
-          </span>
-        )}
+        <span style={{ display: "flex", gap: 5, flexShrink: 0, marginTop: 2 }}>
+          {brand.source === "manual" && (
+            <span
+              title="Came in off-website — added by hand"
+              style={{ color: "var(--ink-muted)" }}
+            >
+              <UserPlus size={13} />
+            </span>
+          )}
+          {brand.documents.length > 0 && (
+            <span
+              title={`${brand.documents.length} document${brand.documents.length > 1 ? "s" : ""}`}
+              style={{ color: "var(--ink-muted)" }}
+            >
+              <FileText size={13} />
+            </span>
+          )}
+          {brand.stage_source === "manual" && (
+            <span
+              title="Pinned by hand — the hourly scan will not move this card"
+              style={{ color: "var(--ink-muted)" }}
+            >
+              <Pin size={13} />
+            </span>
+          )}
+        </span>
       </div>
 
       {brand.summary && (

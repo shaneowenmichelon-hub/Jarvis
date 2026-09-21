@@ -114,6 +114,14 @@ create table if not exists brands (
   updated_at            timestamptz not null default now()
 );
 
+-- How the brand got here: a website submission, or entered by hand because it
+-- came in off-website. Added after the first live run.
+alter table brands add column if not exists source text not null default 'form'
+  check (source in ('form', 'manual'));
+
+-- Proposals, decks and contracts pinned to the brand.
+alter table brands add column if not exists documents jsonb not null default '[]'::jsonb;
+
 create index if not exists brands_stage_idx        on brands (stage) where archived = false;
 create index if not exists brands_owner_idx        on brands (owner_email);
 create index if not exists brands_last_message_idx on brands (last_message_at desc);
