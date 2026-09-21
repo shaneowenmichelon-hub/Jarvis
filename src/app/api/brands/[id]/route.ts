@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 
 import { apiUser } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import { isStage, type BrandRow, type Stage } from "@/lib/types";
+import {
+  addIgnoredSender,
+  addStageEvent,
+  getBrand,
+  removeIgnoredSender,
+  updateBrand,
+} from "@/lib/data";
+import { isStage, type Stage } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -34,21 +40,9 @@ export async function PATCH(
 
   const { id } = await context.params;
   const body = (await request.json().catch(() => ({}))) as UpdateBody;
-  const db = supabaseAdmin();
 
-  const { data: brand, error: loadError } = await db
-    .from("brands")
-    .select("id, stage, stage_source, auto_stage, domain, primary_contact_email, blocked")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
-  if (!brand) return NextResponse.json({ error: "Brand not found" }, { status: 404 });
-
-  const current = brand as Pick<
-    BrandRow,
-    "id" | "stage" | "stage_source" | "auto_stage" | "domain" | "primary_contact_email" | "blocked"
-  >;
+  const current = await getBrand(id);
+  if (!current) return NextResponse.json({ error: "Brand not found" }, { status: 404 });
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
   let stageMove: { from: Stage; to: Stage; source: "auto" | "manual"; note: string } | null = null;
@@ -114,9 +108,7 @@ export async function PATCH(
     // Undoing a dismissal has to lift the sender block too, or the brand comes
     // back to the board and then quietly stops updating.
     const pattern = current.domain ?? current.primary_contact_email;
-    if (pattern) {
-      await db.from("ignored_senders").delete().eq("pattern", pattern.toLowerCase());
-    }
+    if (pattern) await removeIgnoredSender(pattern.toLowerCase());
   }
 
   if (body.dismiss) {
@@ -133,22 +125,23 @@ export async function PATCH(
     // Remember the sender so the next scan does not put it straight back.
     const pattern = current.domain ?? current.primary_contact_email;
     if (pattern) {
-      await db.from("ignored_senders").upsert(
-        {
-          pattern: pattern.toLowerCase(),
-          reason: "Dismissed from the dashboard",
-          added_by: user.email,
-        },
-        { onConflict: "pattern" },
-      );
+      await addIgnoredSender({
+        pattern: pattern.toLowerCase(),
+        reason: "Dismissed from the dashboard",
+        added_by: user.email,
+      });
     }
   }
 
-  const { error: updateError } = await db.from("brands").update(update).eq("id", id);
-  if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+  try {
+    await updateBrand(id, update);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not save";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 
   if (stageMove) {
-    await db.from("stage_events").insert({
+    await addStageEvent({
       brand_id: id,
       from_stage: stageMove.from,
       to_stage: stageMove.to,

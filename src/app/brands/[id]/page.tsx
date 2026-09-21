@@ -4,51 +4,22 @@ import { notFound } from "next/navigation";
 
 import BrandEditor from "@/components/BrandEditor";
 import { requireUser } from "@/lib/auth";
+import { getBrand, listMessages, listStageEvents } from "@/lib/data";
 import { allowedEmails } from "@/lib/env";
 import { currency, dateTime, relativeTime, shortDate } from "@/lib/format";
 import { urgency } from "@/lib/stages";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import { STAGE_META, type BrandRow, type MessageRow, type Stage } from "@/lib/types";
+import { STAGE_META } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-interface StageEventRow {
-  id: number;
-  from_stage: Stage | null;
-  to_stage: Stage;
-  source: "auto" | "manual";
-  actor: string | null;
-  note: string | null;
-  created_at: string;
-}
 
 export default async function BrandPage({ params }: { params: Promise<{ id: string }> }) {
   await requireUser();
   const { id } = await params;
-  const db = supabaseAdmin();
 
-  const { data: brandData } = await db.from("brands").select("*").eq("id", id).maybeSingle();
-  if (!brandData) notFound();
+  const brand = await getBrand(id);
+  if (!brand) notFound();
 
-  const brand = brandData as BrandRow;
-
-  const [messagesResult, eventsResult] = await Promise.all([
-    db
-      .from("messages")
-      .select("*")
-      .eq("brand_id", id)
-      .order("sent_at", { ascending: false })
-      .limit(100),
-    db
-      .from("stage_events")
-      .select("*")
-      .eq("brand_id", id)
-      .order("created_at", { ascending: false })
-      .limit(30),
-  ]);
-
-  const messages = (messagesResult.data ?? []) as MessageRow[];
-  const events = (eventsResult.data ?? []) as StageEventRow[];
+  const [messages, events] = await Promise.all([listMessages(id), listStageEvents(id)]);
   const age = urgency(brand.stage, brand.last_message_at, new Date());
 
   return (

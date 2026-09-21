@@ -13,6 +13,14 @@ import { NextResponse, type NextRequest } from "next/server";
  * it reads a cookie, and a cookie is not a decision about who you are.
  */
 export async function middleware(request: NextRequest) {
+  // Local mode: no Supabase, so no session to refresh and nothing to gate.
+  // The app is running on the user's own machine against a file there.
+  const localMode =
+    process.env.LOCAL_MODE === "1" ||
+    (process.env.LOCAL_MODE !== "0" && !process.env.NEXT_PUBLIC_SUPABASE_URL);
+
+  if (localMode) return NextResponse.next({ request });
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(

@@ -11,9 +11,11 @@ import ThemeToggle from "./ThemeToggle";
 export default function Header({
   user,
   lastRun,
+  localMode = false,
 }: {
   user: SessionUser;
   lastRun: ScanRunRow | null;
+  localMode?: boolean;
 }) {
   return (
     <header
@@ -34,25 +36,32 @@ export default function Header({
           <h1 style={{ margin: 0, fontSize: 22, letterSpacing: "-0.01em" }}>Sponsor Command</h1>
         </Link>
         <p style={{ margin: "4px 0 0", fontSize: 12.5, color: "var(--ink-muted)" }}>
-          <ScanStatus lastRun={lastRun} />
+          {localMode ? (
+            <>Local copy · scanned {relativeTime(lastRun?.started_at ?? null)}</>
+          ) : (
+            <ScanStatus lastRun={lastRun} />
+          )}
         </p>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-        <ScanButton />
+        {/* No inbox is connected locally, so there is nothing to scan. */}
+        {!localMode && <ScanButton />}
         <Link href="/settings" className="btn btn-sm" aria-label="Settings">
           <Settings size={14} />
         </Link>
         <ThemeToggle />
-        <form action="/auth/signout" method="post">
-          <button
-            className="btn btn-sm"
-            type="submit"
-            title={`Signed in as ${user.email}`}
-          >
-            {user.name ?? user.email}
-          </button>
-        </form>
+        {localMode ? (
+          <span className="btn btn-sm" style={{ cursor: "default" }} title="Local mode — no sign-in">
+            Local
+          </span>
+        ) : (
+          <form action="/auth/signout" method="post">
+            <button className="btn btn-sm" type="submit" title={`Signed in as ${user.email}`}>
+              {user.name ?? user.email}
+            </button>
+          </form>
+        )}
       </div>
     </header>
   );

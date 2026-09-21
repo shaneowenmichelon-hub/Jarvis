@@ -3,10 +3,16 @@ import Link from "next/link";
 
 import BackfillButton from "@/components/BackfillButton";
 import { requireUser } from "@/lib/auth";
+import {
+  isLocalMode,
+  listArchivedBrands,
+  listBlockedEntities,
+  listIgnoredSenders,
+  listInboxes,
+  listScanRuns,
+} from "@/lib/data";
 import { allowedDomain, allowedEmails } from "@/lib/env";
 import { dateTime, relativeTime } from "@/lib/format";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import type { BrandRow, ScanRunRow } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -17,41 +23,15 @@ export default async function SettingsPage({
 }) {
   await requireUser();
   const { connected, error } = await searchParams;
-  const db = supabaseAdmin();
+  const local = isLocalMode();
 
-  const [accountResult, runsResult, ignoredResult, blockedResult, archivedResult] =
-    await Promise.all([
-      db.from("gmail_accounts").select("*").order("connected_at", { ascending: false }),
-      db.from("scan_runs").select("*").order("started_at", { ascending: false }).limit(12),
-      db.from("ignored_senders").select("*").order("created_at", { ascending: false }).limit(50),
-      db.from("blocked_entities").select("*").order("pattern"),
-      db
-        .from("brands")
-        .select("id, name, primary_contact_email, blocked")
-        .eq("archived", true)
-        .order("updated_at", { ascending: false })
-        .limit(40),
-    ]);
-
-  const accounts = (accountResult.data ?? []) as {
-    id: string;
-    email: string;
-    connected_by: string | null;
-    connected_at: string;
-    last_scan_at: string | null;
-    active: boolean;
-  }[];
-  const runs = (runsResult.data ?? []) as ScanRunRow[];
-  const ignored = (ignoredResult.data ?? []) as {
-    pattern: string;
-    reason: string | null;
-    added_by: string | null;
-  }[];
-  const blocked = (blockedResult.data ?? []) as { pattern: string; reason: string | null }[];
-  const archived = (archivedResult.data ?? []) as Pick<
-    BrandRow,
-    "id" | "name" | "primary_contact_email" | "blocked"
-  >[];
+  const [accounts, runs, ignored, blocked, archived] = await Promise.all([
+    listInboxes(),
+    listScanRuns(12),
+    listIgnoredSenders(50),
+    listBlockedEntities(),
+    listArchivedBrands(40),
+  ]);
 
   const live = accounts.find((account) => account.active);
 
@@ -79,8 +59,26 @@ export default async function SettingsPage({
       )}
       {error && <Banner tone="critical">{error}</Banner>}
 
+      {local && (
+        <Section title="Local mode">
+          <p style={{ margin: 0, fontSize: 12.5, color: "var(--ink-secondary)" }}>
+            No Supabase project is configured, so the dashboard is reading{" "}
+            <code>.local-data/db.json</code> instead of a database, and sign-in is off. Your
+            edits persist to that file. Delete it and restart to go back to the seeded
+            pipeline. Set the Supabase variables in <code>.env.local</code> to switch to the
+            real thing.
+          </p>
+        </Section>
+      )}
+
       <Section title="Inbox">
-        {live ? (
+        {local ? (
+          <p style={{ margin: 0, fontSize: 12.5, color: "var(--ink-secondary)" }}>
+            The seed was built from a real scan of <strong>{live?.email}</strong> covering
+            31 August to 21 September 2026. Connecting a live inbox needs the Google OAuth
+            credentials — see the README.
+          </p>
+        ) : live ? (
           <div style={{ display: "grid", gap: 10 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13.5 }}>
               <CheckCircle2 size={15} style={{ color: "var(--good)", flexShrink: 0 }} />

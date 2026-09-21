@@ -34,6 +34,41 @@ campaign; you just owe them a message.
 
 ---
 
+## Run it locally right now
+
+No accounts, no keys, nothing to sign up for:
+
+```bash
+git clone https://github.com/shaneowenmichelon-hub/Jarvis.git
+cd Jarvis
+git checkout claude/nifty-ride-et5emr
+npm install
+npm run dev
+```
+
+Open **http://localhost:3000**.
+
+With no Supabase configured the app boots in **local mode**: sign-in is off and
+it reads [`seed/pipeline.json`](seed/pipeline.json) instead of a database — 34
+brands from a real scan of the ZMM inbox covering 31 August to 21 September
+2026. The board, the brand pages with their email timelines, moving cards,
+assigning owners, deal values, notes and dismissals all work, and your edits
+persist to `.local-data/db.json`.
+
+What local mode cannot do is read live mail — there is no inbox connected, so
+there is no "Scan now". For that you need the setup below.
+
+```bash
+rm -rf .local-data     # throw away your edits, back to the seeded pipeline
+node scripts/build-seed.mjs   # rebuild the seed itself
+```
+
+The seed's stages are not typed in by hand: `build-seed.mjs` runs the same
+derivation the hourly scan uses, so the seeded board cannot drift from the
+engine.
+
+---
+
 ## Setup
 
 About 30 minutes, once. You need a Google account with admin rights on the
