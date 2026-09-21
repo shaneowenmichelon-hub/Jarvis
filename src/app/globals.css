@@ -1,0 +1,248 @@
+/*
+ * Theme tokens.
+ *
+ * Dark values are declared twice on purpose: once under the OS preference and
+ * once under an explicit `data-theme`, so a viewer's toggle beats the OS in
+ * both directions.
+ *
+ * The three accent colors encode whose move it is, not which column you are
+ * looking at — column identity comes from its heading. Three hues rather than
+ * four because three is the most this palette can carry while staying
+ * distinguishable to colorblind viewers with every column on screen at once.
+ */
+
+:root {
+  color-scheme: light;
+
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-raised: #ffffff;
+  --sunken: #f2f2ef;
+
+  --ink: #0b0b0b;
+  --ink-secondary: #52514e;
+  --ink-muted: #898781;
+
+  --border: rgba(11, 11, 11, 0.1);
+  --border-strong: #e1e0d9;
+
+  /* Whose move is it. */
+  --ball-us: #eb6834;
+  --ball-them: #2a78d6;
+  --ball-running: #1baf7a;
+
+  /* Reserved for state, never for identity. Always shipped with a label. */
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+
+  --shadow: 0 1px 2px rgba(11, 11, 11, 0.06), 0 4px 12px rgba(11, 11, 11, 0.04);
+  --radius: 10px;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --surface-raised: #232322;
+    --sunken: #151514;
+
+    --ink: #ffffff;
+    --ink-secondary: #c3c2b7;
+    --ink-muted: #898781;
+
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: #2c2c2a;
+
+    --ball-us: #d95926;
+    --ball-them: #3987e5;
+    --ball-running: #199e70;
+
+    --shadow: none;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-raised: #232322;
+  --sunken: #151514;
+
+  --ink: #ffffff;
+  --ink-secondary: #c3c2b7;
+  --ink-muted: #898781;
+
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: #2c2c2a;
+
+  --ball-us: #d95926;
+  --ball-them: #3987e5;
+  --ball-running: #199e70;
+
+  --shadow: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--page);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* --- shared primitives --------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 120ms ease, border-color 120ms ease;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--sunken);
+}
+
+.btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--ink);
+  color: var(--page);
+  border-color: var(--ink);
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.88;
+  background: var(--ink);
+}
+
+.btn-sm {
+  padding: 4px 9px;
+  font-size: 12px;
+  border-radius: 7px;
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+input[type="text"],
+input[type="number"],
+select,
+textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-raised);
+}
+
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--ball-them);
+  outline-offset: 2px;
+}
+
+/* --- board --------------------------------------------------------------- */
+
+.board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(260px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .board {
+    grid-template-columns: repeat(2, minmax(240px, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .board {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stat-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 900px) {
+  .stat-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.page {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+@media (max-width: 680px) {
+  .page {
+    padding: 16px 16px 48px;
+  }
+}
