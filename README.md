@@ -109,97 +109,22 @@ engine.
 
 ## Setup
 
-About 30 minutes, once. You need a Google account with admin rights on the
-inbox, a Supabase account, and a Vercel account.
+**[DEPLOY.md](DEPLOY.md) is the step-by-step checklist.** It runs entirely in a
+browser and takes about 30 minutes.
 
-### 1. Supabase — the shared database
+The short version: a **Supabase** project holds the data, a **Google Cloud**
+OAuth client grants read-only access to the inbox, and **Vercel** serves the
+site. Do them in that order but put Vercel before Google — Google's redirect
+URIs need your Vercel address, and every guide that does it the other way makes
+you go back and edit them.
 
-1. Create a project at [supabase.com](https://supabase.com). Any region; free
-   tier is plenty.
-2. Open **SQL Editor → New query**, paste the whole of
-   [`supabase/schema.sql`](supabase/schema.sql), and run it. It creates the
-   tables, the four-stage type, and the do-not-contact seed.
-3. Go to **Project Settings → API** and copy three values for later:
-   the **Project URL**, the **anon public** key, and the **service_role** key.
+Two things that bite, both covered in DEPLOY.md:
 
-> The `service_role` key bypasses all database security. It belongs only in
-> Vercel's environment variables — never in the browser, never in this repo.
-
-### 2. Google Cloud — one OAuth client for both jobs
-
-Sign-in and Gmail reading share a single OAuth client.
-
-1. At [console.cloud.google.com](https://console.cloud.google.com), create a
-   project (or reuse one).
-2. **APIs & Services → Library**, search **Gmail API**, click **Enable**.
-3. **APIs & Services → OAuth consent screen**. Choose **Internal** if
-   zmmevents.com is a Google Workspace domain — this avoids Google's app
-   verification review entirely. Otherwise choose **External** and add each
-   teammate as a test user.
-4. Add the scope `https://www.googleapis.com/auth/gmail.readonly`.
-5. **Credentials → Create credentials → OAuth client ID → Web application**.
-
-   Authorised redirect URIs — add all of these:
-
-   ```
-   https://<your-project>.supabase.co/auth/v1/callback
-   https://<your-app>.vercel.app/api/gmail/callback
-   http://localhost:3000/api/gmail/callback
-   ```
-
-6. Copy the **Client ID** and **Client secret**.
-
-### 3. Supabase — turn on Google sign-in
-
-In Supabase, **Authentication → Providers → Google**: enable it and paste the
-same Client ID and secret from step 2.
-
-### 4. Vercel — deploy
-
-1. Import this repository at [vercel.com/new](https://vercel.com/new). It is a
-   standard Next.js app; the defaults are correct.
-2. Add the environment variables from
-   [`.env.example`](.env.example). The ones that must be set:
-
-   | Variable | Value |
-   |---|---|
-   | `NEXT_PUBLIC_SUPABASE_URL` | from step 1 |
-   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | from step 1 |
-   | `SUPABASE_SERVICE_ROLE_KEY` | from step 1 |
-   | `GOOGLE_CLIENT_ID` | from step 2 |
-   | `GOOGLE_CLIENT_SECRET` | from step 2 |
-   | `ALLOWED_EMAILS` | every teammate's address, comma-separated |
-   | `CRON_SECRET` | `openssl rand -hex 32` |
-
-3. Deploy, then open the URL and sign in with Google. Only addresses in
-   `ALLOWED_EMAILS` (or on `ALLOWED_DOMAIN`) get past the door.
-
-### 5. Connect the inbox and run the first scan
-
-Open **Settings → Connect Gmail** and approve the consent screen. Google will
-say the app wants to *read* your mail — that is the only scope requested; it
-cannot send, label, or delete anything.
-
-Then press **Scan now**. The first run reaches back six months, so give it a
-few minutes. After that each hourly run only reads what is new.
-
-### 6. Make it actually run hourly
-
-**Vercel's Hobby plan only allows one cron run per day.** Two ways to get to
-sixty minutes:
-
-- **Vercel Pro** (~$20/month) — [`vercel.json`](vercel.json) already schedules
-  `/api/cron/scan` hourly. Nothing else to do. Also add `CRON_SECRET` to the
-  project; Vercel sends it automatically.
-- **GitHub Actions, free** — [`.github/workflows/scan.yml`](.github/workflows/scan.yml)
-  calls the same endpoint on the same schedule. Add two repository secrets:
-  `DASHBOARD_URL` (your Vercel URL) and `CRON_SECRET` (the same value as in
-  Vercel). If you go this route, delete `vercel.json`'s `crons` block so the
-  work is not queued twice.
-
-Either way, the dashboard header shows when the last scan ran and turns amber
-if it has been more than three hours — a scheduler that silently stopped is the
-failure mode worth catching.
+- **Pick "Internal" on the Google consent screen** if zmmevents.com is Google
+  Workspace. On "External", Google expires the Gmail connection every 7 days
+  until the app passes a review that takes weeks.
+- **Environment variables only apply to a new deployment.** Adding one in
+  Vercel and refreshing the page changes nothing until you redeploy.
 
 ---
 
@@ -378,8 +303,9 @@ The four things `doctor` is looking for:
 
 1. **Wrong folder.** `ls` should show `package.json`. If not, `cd` into the
    Jarvis directory.
-2. **Wrong branch.** The dashboard only exists on
-   `claude/nifty-ride-et5emr`. On `main` there is no app to run.
+2. **Wrong branch.** The app has to actually be on the branch you checked
+   out. `git branch --show-current`, then `ls src/app` — if that is empty or
+   missing, you are on a branch without the dashboard on it.
 3. **Different port.** If something else already has 3000, Next picks the next
    free one and prints it — `- Local: http://localhost:3001`. Use the port it
    prints, not the one in this README.
@@ -398,6 +324,13 @@ filed as promotions.
 
 **"Gmail refresh token is no longer valid."** Google revokes tokens on password
 changes, and after six months of disuse. Reconnect from Settings.
+
+**Gmail disconnects every week, like clockwork.** Not a bug at this end. The
+Google consent screen is set to **External** and still in testing, and Google
+expires those refresh tokens after 7 days. Switch it to **Internal**
+(Google Cloud → APIs & Services → OAuth consent screen), which is available
+because zmmevents.com is a Workspace domain, and reconnect once more. See
+[DEPLOY.md](DEPLOY.md) step 3.
 
 **Google did not issue a refresh token on reconnect.** Google only issues one
 on first consent. Remove the app at
