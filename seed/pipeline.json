@@ -628,6 +628,26 @@
       "updated_at": "2026-08-31T17:01:54Z"
     }
   ],
+  "ambassador_stage_events": [
+    {
+      "id": 1,
+      "ambassador_id": "amb-04",
+      "from_stage": "applied",
+      "to_stage": "reviewing",
+      "actor": "shane@zmmevents.com",
+      "note": null,
+      "created_at": "2026-09-18T20:08:24Z"
+    },
+    {
+      "id": 2,
+      "ambassador_id": "amb-12",
+      "from_stage": "applied",
+      "to_stage": "reviewing",
+      "actor": "shane@zmmevents.com",
+      "note": null,
+      "created_at": "2026-08-31T17:01:54Z"
+    }
+  ],
   "messages": [
     {
       "id": "seed-01-m1",

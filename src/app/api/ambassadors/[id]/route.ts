@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 
 import { isAmbassadorStage } from "@/lib/ambassadors";
 import { apiUser } from "@/lib/auth";
-import { getAmbassador, updateAmbassador } from "@/lib/data";
+import { getAmbassador, recordAmbassadorStageEvent, updateAmbassador } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +30,8 @@ export async function PATCH(
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
 
+  let moved: { from: typeof current.stage; to: typeof current.stage } | null = null;
+
   if (body.stage !== undefined) {
     if (!isAmbassadorStage(body.stage)) {
       return NextResponse.json({ error: `Unknown stage: ${body.stage}` }, { status: 400 });
@@ -41,6 +43,7 @@ export async function PATCH(
       update.stage_source = "manual";
       update.stage_changed_at = new Date().toISOString();
       update.stage_changed_by = user.email;
+      moved = { from: current.stage, to: body.stage };
     }
   }
 
@@ -58,6 +61,18 @@ export async function PATCH(
 
   try {
     await updateAmbassador(id, update);
+
+    // After the write, so a failed update leaves no trail claiming otherwise.
+    if (moved) {
+      await recordAmbassadorStageEvent({
+        ambassador_id: id,
+        from_stage: moved.from,
+        to_stage: moved.to,
+        actor: user.email,
+        note: null,
+      });
+    }
+
     return NextResponse.json({ ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not save";

@@ -347,6 +347,22 @@ create index if not exists ambassadors_stage_idx  on ambassadors (stage) where a
 create index if not exists ambassadors_school_idx on ambassadors (school);
 create index if not exists ambassadors_applied_idx on ambassadors (applied_at desc);
 
+-- Who moved an applicant, and when. Recruiting decisions are all judgement
+-- calls, so the trail of who made them is the whole audit story — there is no
+-- email to reconstruct it from, the way there is for a brand.
+create table if not exists ambassador_stage_events (
+  id              bigserial primary key,
+  ambassador_id   uuid not null references ambassadors (id) on delete cascade,
+  from_stage      ambassador_stage,
+  to_stage        ambassador_stage not null,
+  actor           text,
+  note            text,
+  created_at      timestamptz not null default now()
+);
+
+create index if not exists ambassador_stage_events_idx
+  on ambassador_stage_events (ambassador_id, created_at desc);
+
 
 -- ---------------------------------------------------------------------------
 -- Row level security.
@@ -364,6 +380,7 @@ alter table brands           enable row level security;
 alter table threads          enable row level security;
 alter table messages         enable row level security;
 alter table stage_events     enable row level security;
+alter table ambassador_stage_events enable row level security;
 alter table ignored_senders  enable row level security;
 alter table blocked_entities enable row level security;
 alter table scan_runs        enable row level security;

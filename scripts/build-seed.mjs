@@ -388,6 +388,14 @@ const AMBASSADORS = [
   },
 ];
 
+/**
+ * The moves that put the two pinned applicants where they are.
+ *
+ * Their rows say a person set the stage; without the matching event the
+ * history panel would claim nobody ever moved them.
+ */
+const ambassadorStageEvents = [];
+
 const ambassadors = AMBASSADORS.map((row, index) => {
   const pinned = Boolean(row.stage);
   return {
@@ -427,10 +435,24 @@ const ambassadors = AMBASSADORS.map((row, index) => {
   };
 });
 
+ambassadors.forEach((row) => {
+  if (row.stage_source !== "manual") return;
+  ambassadorStageEvents.push({
+    id: ambassadorStageEvents.length + 1,
+    ambassador_id: row.id,
+    from_stage: "applied",
+    to_stage: row.stage,
+    actor: row.stage_changed_by,
+    note: null,
+    created_at: row.stage_changed_at,
+  });
+});
+
 const db = {
   scanned_at: SCANNED_AT,
   brands,
   ambassadors,
+  ambassador_stage_events: ambassadorStageEvents,
   messages,
   stage_events: stageEvents,
   scan_runs: [

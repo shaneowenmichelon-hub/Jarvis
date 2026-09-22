@@ -18,6 +18,7 @@ import { groupKeyFor } from "./classify";
 import { supabaseAdmin } from "./supabase/admin";
 import type {
   AmbassadorRow,
+  AmbassadorStageEventRow,
   BrandDocument,
   BrandRow,
   MessageRow,
@@ -375,21 +376,67 @@ export async function removeIgnoredSender(pattern: string): Promise<void> {
 // purpose — an applicant is not a lead.
 // ---------------------------------------------------------------------------
 
-export async function listAmbassadors(): Promise<AmbassadorRow[]> {
+/**
+ * The recruiting list.
+ *
+ * `archived` selects which side to return, never both: an archived applicant
+ * is one somebody decided against, and quietly mixing them back into the list
+ * would undo that decision.
+ */
+export async function listAmbassadors(
+  options: { archived?: boolean } = {},
+): Promise<AmbassadorRow[]> {
+  const archived = options.archived ?? false;
+
   if (isLocalMode()) {
     const db = await readDatabase();
     return (db.ambassadors ?? [])
-      .filter((ambassador) => !ambassador.archived)
+      .filter((ambassador) => Boolean(ambassador.archived) === archived)
       .sort((a, b) => b.applied_at.localeCompare(a.applied_at));
   }
 
   const { data } = await supabaseAdmin()
     .from("ambassadors")
     .select("*")
-    .eq("archived", false)
+    .eq("archived", archived)
     .order("applied_at", { ascending: false });
 
   return (data ?? []) as AmbassadorRow[];
+}
+
+/** Who moved this applicant, and when. Newest first. */
+export async function listAmbassadorStageEvents(
+  ambassadorId: string,
+): Promise<AmbassadorStageEventRow[]> {
+  if (isLocalMode()) {
+    const db = await readDatabase();
+    return (db.ambassador_stage_events ?? [])
+      .filter((event) => event.ambassador_id === ambassadorId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  }
+
+  const { data } = await supabaseAdmin()
+    .from("ambassador_stage_events")
+    .select("*")
+    .eq("ambassador_id", ambassadorId)
+    .order("created_at", { ascending: false });
+
+  return (data ?? []) as AmbassadorStageEventRow[];
+}
+
+export async function recordAmbassadorStageEvent(
+  event: Omit<AmbassadorStageEventRow, "id" | "created_at">,
+): Promise<void> {
+  if (isLocalMode()) {
+    await mutate((db) => {
+      db.ambassador_stage_events ??= [];
+      const id = db.ambassador_stage_events.reduce((max, row) => Math.max(max, row.id), 0) + 1;
+      db.ambassador_stage_events.push({ ...event, id, created_at: new Date().toISOString() });
+    });
+    return;
+  }
+
+  await supabaseAdmin().from("ambassador_stage_events").insert(event);
 }
 
 export async function getAmbassador(id: string): Promise<AmbassadorRow | null> {

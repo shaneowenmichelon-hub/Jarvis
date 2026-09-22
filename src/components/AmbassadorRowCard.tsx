@@ -1,6 +1,7 @@
 "use client";
 
-import { Archive, Instagram, Music2 } from "lucide-react";
+import { Archive, Instagram, Music2, StickyNote, Undo2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
@@ -57,7 +58,21 @@ export default function AmbassadorRowCard({
     >
       <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 14.5 }}>{ambassador.full_name}</div>
+          <div style={{ fontWeight: 600, fontSize: 14.5, display: "flex", alignItems: "center", gap: 7 }}>
+            <Link
+              href={`/ambassadors/${ambassador.id}`}
+              style={{ color: "inherit", textDecoration: "none" }}
+            >
+              {ambassador.full_name}
+            </Link>
+            {ambassador.notes && (
+              <StickyNote
+                size={13}
+                aria-label="Has notes"
+                style={{ color: "var(--ink-muted)", flexShrink: 0 }}
+              />
+            )}
+          </div>
           <div style={{ fontSize: 12.5, color: "var(--ink-secondary)", marginTop: 1 }}>
             {ambassador.school ?? "school not given"}
             {ambassador.grad_year && ` · ’${ambassador.grad_year.slice(-2)}`}
@@ -161,11 +176,15 @@ export default function AmbassadorRowCard({
         <button
           className="btn btn-sm"
           disabled={disabled}
-          onClick={() => patch({ archive: true })}
-          title="Not a fit — keeps the record, takes them off the list"
+          onClick={() => patch(ambassador.archived ? { restore: true } : { archive: true })}
+          title={
+            ambassador.archived
+              ? "Put them back on the list"
+              : "Not a fit — keeps the record, takes them off the list"
+          }
           style={{ marginLeft: "auto" }}
         >
-          <Archive size={13} />
+          {ambassador.archived ? <Undo2 size={13} /> : <Archive size={13} />}
         </button>
       </div>
 

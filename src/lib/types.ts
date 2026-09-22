@@ -200,6 +200,16 @@ export interface ScanRunRow {
  * Deliberately separate from a brand: an applicant is not a lead, and putting
  * the two on one board is what makes a sponsorship pipeline unreadable.
  */
+export interface AmbassadorStageEventRow {
+  id: number;
+  ambassador_id: string;
+  from_stage: import("./ambassadors").AmbassadorStage | null;
+  to_stage: import("./ambassadors").AmbassadorStage;
+  actor: string | null;
+  note: string | null;
+  created_at: string;
+}
+
 export interface AmbassadorRow {
   id: string;
   /** Gmail message id of the application, so a rescan cannot duplicate them. */

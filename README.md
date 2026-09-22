@@ -65,8 +65,22 @@ only job here is making sure every application shows up exactly once — rows ar
 keyed on the Gmail message id, so a rescan cannot duplicate anybody.
 
 Filters across the top: stage (with live counts), school, and sort by newest or
-by biggest reach. **Archive** on a row keeps the record but takes them off the
-list — for a duplicate, a test submission, or someone who is not a fit.
+by biggest reach.
+
+Click a name for their full application — everything the form captured, not
+just what fits on a row — plus the three things that make it a tracker rather
+than a list:
+
+- **Notes.** What was said on the call, whose campus they can cover, what is
+  still outstanding. Saves when you click away. A row with notes shows a small
+  marker, so you can see at a glance which ones have been worked.
+- **Stage history.** Who moved them, from what, and when. Recruiting is all
+  judgement calls and there is no email trail to reconstruct them from later,
+  unlike a brand.
+- **Archive, and undo.** Archiving takes someone off the list and keeps the
+  record — a duplicate, a test, someone who is not a fit. **View archived** at
+  the bottom of the list shows them, and one button puts anyone back. Nothing
+  is ever deleted.
 
 ---
 
@@ -260,7 +274,7 @@ screening rules that decide what counts as a brand are in
 src/
 ├── app/
 │   ├── page.tsx              # the pipeline board
-│   ├── ambassadors/          # the ambassador list
+│   ├── ambassadors/          # the ambassador list, and one applicant
 │   ├── brands/[id]/          # brand detail and email timeline
 │   ├── settings/             # Gmail connection, scan log, skip lists
 │   └── api/
