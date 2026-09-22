@@ -1,0 +1,41 @@
+name: Hourly inbox scan
+
+# Vercel's Hobby plan caps cron jobs at once per day, so hourly scanning needs
+# either a Vercel Pro plan or this workflow. GitHub Actions runs it free.
+#
+# To use it, add two repository secrets (Settings → Secrets and variables →
+# Actions):
+#   DASHBOARD_URL  — e.g. https://sponsor-command.vercel.app
+#   CRON_SECRET    — the same value set in the Vercel environment
+#
+# If you are on Vercel Pro, delete this file: vercel.json already schedules the
+# same endpoint and running both just doubles the work (the scan takes a lock,
+# so nothing breaks — it is only wasted).
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch: # lets you trigger a scan by hand from the Actions tab
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the scan
+        run: |
+          response=$(curl --silent --show-error --fail-with-body \
+            --max-time 300 \
+            --write-out "\n%{http_code}" \
+            --header "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.DASHBOARD_URL }}/api/cron/scan")
+
+          body=$(echo "$response" | sed '$d')
+          status=$(echo "$response" | tail -n1)
+
+          echo "$body"
+          echo "HTTP $status"
+
+          if [ "$status" != "200" ]; then
+            echo "::error::Scan failed with HTTP $status"
+            exit 1
+          fi
